@@ -1,0 +1,29 @@
+.message {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  max-width: min(720px, 92%);
+  padding: 14px 16px;
+}
+
+.assistant {
+  align-self: flex-start;
+  background: var(--rose-50);
+}
+
+.user {
+  align-self: flex-end;
+  background: var(--surface);
+}
+
+.label {
+  color: var(--brand-red);
+  font-size: 13px;
+  font-weight: 900;
+  margin-bottom: 6px;
+}
+
+.message p {
+  font-size: 16px;
+  line-height: 1.55;
+  margin: 0;
+}

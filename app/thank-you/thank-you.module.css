@@ -1,0 +1,41 @@
+.page {
+  align-items: center;
+  background: linear-gradient(180deg, var(--surface), var(--rose-50));
+  display: flex;
+  min-height: 100vh;
+  justify-content: center;
+  padding: 32px;
+}
+
+.panel {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+  padding: 40px;
+  text-align: center;
+}
+
+.icon {
+  color: var(--brand-red);
+  height: 48px;
+  margin-top: 28px;
+  width: 48px;
+}
+
+.panel h1 {
+  font-size: 28px;
+  line-height: 1.2;
+  margin: 18px 0 12px;
+}
+
+.panel p {
+  color: var(--text-muted);
+  font-size: 17px;
+  line-height: 1.6;
+  margin: 0;
+}

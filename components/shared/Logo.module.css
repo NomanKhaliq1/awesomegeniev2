@@ -1,0 +1,33 @@
+.logo {
+  display: inline-block;
+  position: relative;
+}
+
+.logo img {
+  object-fit: contain;
+}
+
+.small {
+  height: 42px;
+  width: 132px;
+}
+
+.large {
+  height: 58px;
+  width: 180px;
+}
+
+.textLogo {
+  color: var(--brand-red);
+  display: inline-block;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.textLogo.small {
+  font-size: 20px;
+}
+
+.textLogo.large {
+  font-size: 28px;
+}

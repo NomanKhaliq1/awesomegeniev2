@@ -1,0 +1,446 @@
+# Awesome Genie Implementation Phases
+
+## Current State
+
+Overall status:
+
+```txt
+Phase 1: Complete
+Phase 2: Complete
+Phase 3: Complete
+Phase 4: Complete
+Phase 5: Complete
+Phase 6: Complete
+Phase 7: Complete
+Phase 8: Complete
+Phase 9: Complete
+```
+
+Configuration completed so far:
+
+- `.env.local` created
+- Pinecone API key added
+- Pinecone index created as `awesome-genie-rag`
+- Pinecone dimension set to `384`
+- Pinecone metric set to `cosine`
+- Pinecone region set to AWS `us-east-1`
+- Local open-source embedding config selected
+- LLM/SLM provider config selected
+- Google Drive environment values added
+- Cron secret added locally for scheduled sync authentication
+
+Next immediate step:
+
+```txt
+Prepare deployment environment values and run final manual QA.
+```
+
+## Phase 1: Clean App Foundation
+
+Status: Complete
+
+Goal: Create the first production app shell for the full-screen chatbot only.
+
+Done:
+
+- Next.js app scaffold
+- `/chat`, `/thank-you`, and `/error` routes
+- Full-screen chat layout
+- Lato global font
+- Brand theme using primary red `#B5212F`
+- Reusable `Logo` component
+- Root/public logo support
+- No dashboard routes or admin UI
+- Initial API route stubs
+- Live client-side chat session state
+- `/api/chat/start` connected to the chat UI
+- `/api/chat/message` connected to the chat UI
+- Loading, typing, disabled, and error UI states
+- `npm run build` verified
+- `/chat` verified locally with HTTP 200
+- `/api/chat/start` verified locally with HTTP 200
+- `/api/chat/message` verified locally with sample payload
+
+Remaining:
+
+- None for Phase 1
+
+Acceptance checks:
+
+- `/chat` opens as the main full-screen chatbot experience.
+- `/thank-you` and `/error` exist.
+- The UI visibly uses `#B5212F` as the primary brand color.
+- The UI is not dominated by pale pink.
+- No dashboard page exists.
+
+## Phase 2: Supabase Data Foundation
+
+Status: Complete
+
+Goal: Add persistent app data storage.
+
+Done:
+
+- Supabase client setup
+- Environment variable template
+- SQL schema for core tables
+- SQL seed data for `service_categories`
+- SQL seed data for sample `onboarding_fields`
+- Chat session persistence helpers
+- Chat message persistence helpers
+- Config read helpers for service categories and onboarding fields
+- Requirement memory persistence helpers
+- `/api/config/service-categories`
+- `/api/config/onboarding-fields`
+- Chat start API prepared to create persisted sessions
+- Chat message API prepared to save user and assistant messages
+- Chat session API prepared to return session and messages
+- `npm run supabase:smoke` smoke-test script
+- Explicit WebSocket transport for Supabase on current Node setup
+- `supabase/schema.sql` applied in Supabase
+- `npm run supabase:smoke` passed
+- Build verified
+
+Remaining:
+
+- None for Phase 2
+
+Acceptance checks:
+
+- Chat sessions can be created.
+- User and assistant messages can be stored.
+- Service categories are loaded from Supabase.
+- Onboarding questions are loaded from Supabase, not hardcoded in UI.
+
+Security note:
+
+- Tables were created without RLS for current server-side development.
+- The app uses server-side service role access for backend APIs.
+- Public/client-side direct table access is not part of the current UI.
+- RLS policies should be added in Phase 9 before production launch.
+
+## Phase 3: Chat Onboarding Engine
+
+Status: Complete
+
+Goal: Make the chatbot collect client and project requirements in a structured way.
+
+Done:
+
+- `startSession`
+- `handleMessage`
+- internal Router Agent foundation
+- internal Onboarding Agent foundation
+- internal Memory Agent foundation
+- response composer foundation
+- deterministic requirement extraction
+- SLM-backed routing with deterministic fallback
+- SLM-backed structured extraction with deterministic fallback
+- service-specific onboarding fields loaded from Supabase
+- service name to Supabase slug mapping
+- requirement memory update logic
+- conversation summary persistence support
+- onboarding state machine transitions
+- persisted session/progress response shape
+- frontend progress panel uses API-collected fields
+- frontend header status uses onboarding state label
+- live persisted chat API flow verified
+- session fetch API marked dynamic/no-store
+- completion score calculator
+- next-question selector
+- basic irrelevant-message router
+- customer-safe assistant response style
+- `npm run onboarding:smoke`
+- `npm run supabase:smoke` verified after schema application
+- Build verified
+- live chat API verified with persisted session
+- Knowledge Agent handoff added without exposing internal RAG/vector terms
+- runtime chat messages moved to Supabase `prompt_templates`
+- runtime core field labels/questions moved to Supabase `system_settings`
+- runtime frontend chatbot labels moved to Supabase `system_settings`
+- `npm run supabase:seed-chat-config` added and applied
+- relevant chatbot replies now generated by LLM instead of saved answer templates
+- saved answer templates disabled for relevant onboarding/file/knowledge replies
+- saved fallback response kept only for irrelevant/empty-message handling
+- greeting-only messages now use sales-discovery flow instead of lead-form questions
+- initial missing-field panel stays empty until the visitor shows project intent
+- Supabase prompt/settings cache removed so config edits apply immediately
+
+Remaining:
+
+- broaden state machine with complete/upload/Drive transitions in later phases
+
+Acceptance checks:
+
+- Bot greets the user on session start.
+- Bot collects client information.
+- Bot collects project information.
+- Bot asks service-specific onboarding questions.
+- Bot tracks missing fields.
+- Customer never sees internal terms like RAG, Pinecone, chunks, or embeddings.
+
+## Phase 4: Website RAG Foundation
+
+Status: Complete
+
+Goal: Add proper LangChain + Pinecone retrieval for AwesomeTech service answers.
+
+Done:
+
+- Embedding provider selection
+- Pinecone index created
+- Pinecone index name selected
+- Website namespace selected
+- local embedding provider implemented
+- Pinecone client implemented
+- LangChain text splitter implemented
+- website section chunking implemented
+- deterministic website vector IDs implemented
+- website chunk ingestion flow implemented
+- website namespace retrieval implemented
+- RAG context builder implemented
+- retrieval logging helper implemented
+- `npm run rag:ingest` implemented and tested empty state
+- `npm run rag:test` implemented and tested empty state
+- sitemap reader implemented
+- website URL sync/import script implemented
+- 8 AwesomeTech sitemap URLs synced for initial seed
+- 128 website sections imported into Supabase
+- 352 website chunks embedded and upserted to Pinecone
+- DNS fallback added for local full-site sync
+- concurrent website sync added for faster large imports
+- Pinecone upsert batching added to stay under request-size limits
+- Supabase RAG chunk and section sync batching added
+- Supabase RAG section pagination added beyond the 1000-row default limit
+- full AwesomeTech website sync completed: 384 website sources and 6225 website sections stored
+- full website RAG ingest completed: 11032 website vectors upserted to Pinecone
+- grounded answer generator implemented
+- confidence guard added for weak retrieval matches
+- Knowledge Agent connected to chat answers
+- live chat API verified with Encompass service question
+- `npm run rag:ingest` verified with real website sections
+- `npm run rag:test` verified with real Pinecone matches
+- `npm run rag:test` verified after full-site ingest for mortgage websites, MISMO, Encompass, Power BI, and contact queries
+- `npm run production:check` verified after full-site ingest
+
+Remaining deliverables:
+
+- improve rendered extraction for highly dynamic pages in a later hardening phase
+- add curated fallback content for contact/general company questions
+
+Acceptance checks:
+
+- Approved website sections are chunked.
+- Chunks are embedded and upserted to Pinecone.
+- Test queries retrieve relevant chunks by vector similarity.
+- Chat answers service questions from retrieved context.
+- Keyword or JSON retrieval is fallback only.
+
+## Phase 5: File Upload And Client Document RAG
+
+Status: Complete
+
+Goal: Let users upload files and use readable documents as private session context.
+
+Done:
+
+- File validation
+- Supabase Storage upload
+- file metadata rows
+- readable document text extraction
+- uploaded document sources
+- uploaded document chunks
+- Pinecone client namespace ingestion
+- private client/session retrieval
+- real `/api/chat/upload` endpoint
+- upload button connected in chat UI
+- PDF/DOCX/XLSX/TXT/CSV/HTML/JSON/XML extraction path
+- image/SVG/ZIP asset-only storage path
+- session-specific Pinecone namespace for uploaded documents
+- uploaded document context connected to chat answers
+- invalid file type rejection verified
+- live TXT upload smoke verified with Supabase Storage, document source, chunk, and Pinecone vector
+- `npx tsc --noEmit` verified
+
+Remaining:
+
+- broader manual QA with real PDF/DOCX/XLSX samples
+- optional upload progress bar for large files
+
+Acceptance checks:
+
+- Allowed file types upload successfully.
+- Invalid files are rejected.
+- Readable files are extracted, chunked, embedded, and stored in the correct client namespace.
+- Images, logos, screenshots, and ZIPs are stored as assets only.
+- One client's file chunks are never retrieved for another client/session.
+
+## Phase 6: Project Brief Generation
+
+Status: Complete
+
+Goal: Generate a complete handoff brief from structured requirements, chat memory, website context, and uploaded file context.
+
+Done:
+
+- Project brief generator
+- conversation summary support
+- uploaded file summaries
+- missing-information section
+- complexity/risk notes
+- next-step recommendation
+- `project_briefs` persistence
+- real `/api/chat/complete` endpoint with `sessionId`
+- generated Markdown brief using structured memory, recent chat, conversation summary, and uploaded file/document previews
+- Supabase `project_briefs` upsert implemented
+- completion API live verified with sample mortgage integration project
+- `npx tsc --noEmit` verified
+- `npm run onboarding:smoke` verified
+
+Remaining:
+
+- optional UI button to trigger final brief from chat
+- richer complexity scoring and implementation estimate logic in hardening phase
+
+Acceptance checks:
+
+- Final brief includes client details, project scope, problem, features, integrations, assets, missing info, technical notes, risk, and next step.
+- Brief uses structured requirements and retrieved context.
+- Brief does not expose internal implementation terminology to the client.
+
+## Phase 7: Google Drive Handoff
+
+Status: Complete
+
+Goal: Create the final AwesomeTech handoff folder and upload all collected assets.
+
+Done:
+
+- Google Drive environment values added
+- Google Drive client
+- client folder creation
+- standard folder structure
+- upload original files
+- create `project-brief.md`
+- create `requirements.json`
+- create `chat-transcript.txt`
+- create `file-summaries.md`
+- create `internal-notes.md`
+- Drive logs
+- fail-soft Drive handling so brief generation still succeeds
+- Drive failure logging
+- Drive credential diagnostic script added as `npm run drive:check`
+- Google private key PEM format verified
+- Google root folder read access verified
+- Shared Drive support added to Drive API calls
+- OAuth personal Google Drive auth added for non-Workspace accounts
+- OAuth refresh token generated and verified
+- Google Drive write/delete check passed with My Drive folder
+- full e2e handoff passed with Drive status `uploaded`
+- project brief `drive_file_id` update on successful upload
+- `/api/chat/complete` now generates brief and attempts Drive handoff
+- `npx tsc --noEmit` verified
+- live complete endpoint verified: brief generated and Drive upload completed
+
+Remaining:
+
+- retry support
+
+Acceptance checks:
+
+- A client folder is created under the configured root.
+- All original files and generated documents are uploaded.
+- Drive failures do not erase chat or requirement data.
+- Chatbot shows final confirmation after successful handoff.
+
+## Phase 8: Website Sync Automation
+
+Status: Complete
+
+Goal: Keep Pinecone updated without manual maintenance.
+
+Done:
+
+- Yoast sitemap fetcher
+- sitemap HTML/internal-link fallback when XML sitemap is unavailable
+- rendered page extraction fallback
+- content hash comparison
+- WordPress update webhook
+- manual sitemap sync API
+- single URL sync fallback
+- sync job logs
+- stale vector deletion/upsert handling
+- old Pinecone vectors deleted by source before changed-page reingest
+- `sync_jobs`, `sync_job_items`, and `webhook_events` logging
+- `scripts/sync-website.ts` moved to reusable sync runner
+- smoke verified with `SYNC_WEBSITE_MAX_URLS=1` and no ingest
+- `npx tsc --noEmit` verified
+- `npm run onboarding:smoke` verified
+
+Remaining:
+
+- add actual scheduled daily job in deployment platform
+- run larger production sync batch after approval
+- optional Playwright browser rendering upgrade for JS-heavy pages
+
+Acceptance checks:
+
+- Approved changed pages are detected.
+- Updated content regenerates chunks and vectors.
+- Deleted/stale chunks are removed or marked inactive.
+- Manual sync exists only as backup/debug.
+
+## Phase 9: Production Hardening
+
+Status: Complete
+
+Goal: Make the system safe, observable, and production-ready.
+
+Done:
+
+- API validation tightened for chat start/message/upload/complete/sync/webhook routes
+- request rate limits added for high-cost public API routes
+- safe error handling added so failed AI/sync/Drive work returns controlled API errors
+- AI usage logging added for Groq/OpenRouter/Gemini success/failure paths
+- RAG retrieval logs already active for website/document retrieval
+- file type and 15 MB upload size limits verified
+- namespace isolation check added for session-specific uploaded document context
+- prompt safety check added to verify generated-response prompts are active
+- saved-answer prompt check added to verify relevant saved answers remain inactive
+- environment validation and production audit script added
+- Pinecone index existence check added
+- Google Drive credential format warning added without exposing private key contents
+- OAuth personal Google Drive upload support added and verified
+- secure scheduled website sync route added at `/api/cron/website-sync`
+- Vercel cron config added in `vercel.json`
+- local `CRON_SECRET` added for cron authentication
+- production RLS baseline SQL added at `supabase/rls-production.sql`
+- full API end-to-end onboarding smoke script added
+- `npm run production:check` passed with 0 failures and 0 warnings
+- `npm run test:e2e` passed through start, greeting, project message, upload, document-context answer, completion, and Drive upload
+- `npm run onboarding:smoke` passed
+- `npx tsc --noEmit` passed
+
+Remaining:
+
+- set `CRON_SECRET` and Google OAuth env values in deployment environment too
+- apply final RLS policy review before public launch if any direct client-side Supabase table access is introduced
+
+Acceptance checks:
+
+- API keys are never exposed.
+- Chat history survives AI failures.
+- Drive failures are recoverable.
+- Client data isolation is verified.
+- Full onboarding flow passes from `/chat` to final confirmation.
+
+## Initial Build Order
+
+Start with:
+
+1. Phase 1
+2. Phase 2 minimal schema and seeds
+3. Phase 3 basic onboarding
+4. Phase 4 RAG
+
+Then continue through uploads, brief generation, Drive handoff, sync automation, and hardening.

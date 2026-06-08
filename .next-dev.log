@@ -1,0 +1,153 @@
+
+> awesome-genie@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 4.8s
+ ○ Compiling /chat ...
+ ✓ Compiled /chat in 6s (612 modules)
+ GET /chat 200 in 6321ms
+ GET /chat 200 in 36ms
+ ○ Compiling /api/chat/start ...
+ ✓ Compiled /api/chat/start in 919ms (381 modules)
+ POST /api/chat/start 200 in 3332ms
+ ○ Compiling /api/chat/message ...
+ ✓ Compiled /api/chat/message in 2.1s (967 modules)
+ POST /api/chat/message 200 in 5308ms
+ POST /api/chat/message 200 in 15087ms
+ ○ Compiling /api/chat/upload ...
+ ✓ Compiled /api/chat/upload in 6.8s (1593 modules)
+ POST /api/chat/upload 200 in 14787ms
+ POST /api/chat/message 200 in 10934ms
+ ○ Compiling /api/chat/complete ...
+ ✓ Compiled /chat in 15.7s (2499 modules)
+ ✓ Compiled (2734 modules)
+ GET /chat 200 in 6846ms
+ POST /api/chat/start 200 in 2635ms
+ POST /api/chat/start 200 in 2644ms
+ POST /api/chat/complete 200 in 35270ms
+   Reload env: .env.local
+ ✓ Compiled in 1455ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 293ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 134ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 136ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 1661ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 163ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 128ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 141ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 163ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 191ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 1278ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 416ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 294ms (535 modules)
+ ✓ Compiled in 212ms (535 modules)
+ ✓ Compiled in 193ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 356ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 143ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 323ms (535 modules)
+ GET /chat 200 in 272ms
+ ○ Compiling /api/google/oauth/start ...
+ ✓ Compiled /api/google/oauth/start in 6.8s (1462 modules)
+ GET /api/google/oauth/start 307 in 11383ms
+ GET /api/google/oauth/start 307 in 69ms
+ GET /api/google/oauth/start 307 in 1615ms
+ ○ Compiling /api/google/oauth/callback ...
+ ✓ Compiled /api/google/oauth/callback in 3.4s (1462 modules)
+ GET /api/google/oauth/callback?iss=https://accounts.google.com&code=4/0AdkVLPyidXCMkABA0UWYx60m9GJY2y-3v_bxuBKy7xFeHdlUVRh7qinNT8nScjRvxfgx2g&scope=https://www.googleapis.com/auth/drive 200 in 7915ms
+   Reload env: .env.local
+ ✓ Compiled in 449ms (1734 modules)
+   Reload env: .env.local
+ ✓ Compiled in 235ms (1734 modules)
+   Reload env: .env.local
+ ✓ Compiled in 223ms (1734 modules)
+   Reload env: .env.local
+ ✓ Compiled in 211ms (535 modules)
+ ✓ Compiled in 133ms (535 modules)
+ ○ Compiling /api/chat/start ...
+ ✓ Compiled /api/chat/start in 3.1s (381 modules)
+ POST /api/chat/start 200 in 6061ms
+ ○ Compiling /api/chat/message ...
+ ✓ Compiled /api/chat/message in 552ms (967 modules)
+ POST /api/chat/message 200 in 4175ms
+ POST /api/chat/message 200 in 13921ms
+ ○ Compiling /api/chat/upload ...
+ ✓ Compiled /api/chat/upload in 649ms (1593 modules)
+ POST /api/chat/upload 200 in 6969ms
+ POST /api/chat/message 200 in 14421ms
+ ○ Compiling /api/chat/complete ...
+ ✓ Compiled /api/chat/complete in 3.9s (2734 modules)
+ POST /api/chat/complete 200 in 24534ms
+ ✓ Compiled in 659ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 505ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 196ms (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 104ms (535 modules)
+ ○ Compiling /api/chat/start ...
+ ✓ Compiled /api/chat/start in 2.6s (381 modules)
+ POST /api/chat/start 200 in 4590ms
+ ○ Compiling /api/chat/message ...
+ ✓ Compiled /api/chat/message in 547ms (967 modules)
+ POST /api/chat/message 200 in 17313ms
+ POST /api/chat/message 200 in 22799ms
+ ○ Compiling /api/chat/upload ...
+ ✓ Compiled /api/chat/upload in 1898ms (1593 modules)
+ GET /chat 200 in 3261ms
+ POST /api/chat/start 200 in 1682ms
+ POST /api/chat/upload 200 in 9136ms
+ POST /api/chat/start 200 in 2245ms
+ POST /api/chat/message 200 in 11201ms
+ ○ Compiling /api/chat/complete ...
+ ✓ Compiled /api/chat/complete in 4.3s (2734 modules)
+ POST /api/chat/complete 200 in 26435ms
+ POST /api/chat/message 200 in 17303ms
+   Reload env: .env.local
+ ✓ Compiled in 5.5s (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 3.2s (535 modules)
+   Reload env: .env.local
+ ✓ Compiled in 3.6s (535 modules)
+ GET /chat 200 in 2654ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 4.4s (538 modules)
+ GET /_next/static/css/app/chat/page.css?v=1780961249298 404 in 5001ms
+ GET /_next/static/css/app/layout.css?v=1780961249298 404 in 5029ms
+ GET /_next/static/chunks/main-app.js?v=1780961249298 404 in 4518ms
+ GET /_next/static/chunks/webpack.js?v=1780961249298 404 in 4526ms
+ GET /_next/static/chunks/app/chat/page.js 404 in 4519ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 4487ms
+ GET /_next/static/chunks/main-app.js?v=1780961249298 404 in 394ms
+ GET /_next/static/chunks/app/chat/page.js 404 in 376ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 376ms
+ GET /chat 200 in 114ms
+ GET /_next/static/css/app/chat/page.css?v=1780961258806 404 in 141ms
+ GET /_next/static/css/app/layout.css?v=1780961258806 404 in 148ms
+ GET /_next/static/chunks/main-app.js?v=1780961258806 404 in 113ms
+ GET /_next/static/chunks/app/chat/page.js 404 in 107ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 106ms
+ GET /_next/static/chunks/main-app.js?v=1780961258806 404 in 136ms
+ GET /_next/static/chunks/app/chat/page.js 404 in 129ms
+ GET /_next/static/chunks/app-pages-internals.js 404 in 125ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 6.4s (765 modules)
+ GET /chat 404 in 6700ms

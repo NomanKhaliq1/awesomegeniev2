@@ -1,0 +1,245 @@
+.shell {
+  background:
+    linear-gradient(180deg, rgba(250, 240, 241, 0.68), rgba(255, 255, 255, 0) 280px),
+    var(--surface);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.header {
+  align-items: center;
+  border-bottom: 1px solid var(--border-soft);
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  padding: 18px 28px;
+}
+
+.brand {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  min-width: 0;
+}
+
+.brandCopy {
+  border-left: 1px solid var(--border-soft);
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding-left: 16px;
+}
+
+.productName {
+  color: var(--brand-red);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.brandCopy p {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.status {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--rose-100);
+  border-radius: 999px;
+  color: var(--brand-red);
+  display: flex;
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 8px;
+  padding: 9px 13px;
+}
+
+.status svg {
+  height: 16px;
+  width: 16px;
+}
+
+.workspace {
+  display: grid;
+  flex: 1;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: 0;
+  padding: 24px 28px 28px;
+}
+
+.chatColumn {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.conversation {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px;
+}
+
+.dayMarker {
+  align-self: center;
+  background: var(--rose-50);
+  border: 1px solid var(--rose-100);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+.loadingState,
+.typingState,
+.errorState {
+  align-items: center;
+  border-radius: 8px;
+  display: inline-flex;
+  font-size: 14px;
+  gap: 8px;
+  max-width: min(720px, 92%);
+  padding: 12px 14px;
+}
+
+.loadingState,
+.typingState {
+  align-self: flex-start;
+  background: var(--rose-25);
+  border: 1px solid var(--border-soft);
+  color: var(--text-muted);
+}
+
+.errorState {
+  align-self: center;
+  background: #fff7f7;
+  border: 1px solid #efb6bd;
+  color: var(--brand-red);
+  font-weight: 700;
+}
+
+.loadingState svg,
+.typingState svg {
+  animation: spin 900ms linear infinite;
+  height: 16px;
+  width: 16px;
+}
+
+.composerWrap {
+  align-items: center;
+  border-top: 1px solid var(--border-soft);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 16px;
+}
+
+.sidePanel {
+  background: var(--rose-25);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px;
+}
+
+.assistantBadge {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+}
+
+.assistantBadge span {
+  align-items: center;
+  background: var(--brand-red);
+  border-radius: 8px;
+  color: #ffffff;
+  display: flex;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.assistantBadge svg {
+  height: 20px;
+  width: 20px;
+}
+
+.assistantBadge strong {
+  display: block;
+  font-size: 15px;
+}
+
+.assistantBadge p {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 3px 0 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 980px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidePanel {
+    order: -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .brand {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .brandCopy {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .workspace {
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .conversation {
+    padding: 18px;
+  }
+
+  .composerWrap {
+    grid-template-columns: 1fr;
+  }
+}
