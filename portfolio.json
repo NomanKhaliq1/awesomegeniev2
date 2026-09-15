@@ -1,0 +1,19 @@
+{
+  "title": "Awesome Genie v2",
+  "description": "Full-screen onboarding chatbot that runs a client discovery conversation end to end. A flow detector routes each message between discovery and knowledge answering, a gatekeeper agent sits ahead of the router, conversation state and completion rules are tracked per session, and a finished discovery composes a project brief and renders it to DOCX.",
+  "techTags": [
+    "Next.js",
+    "TypeScript",
+    "Supabase",
+    "LangChain",
+    "Multi-agent",
+    "Pinecone"
+  ],
+  "source": "github",
+  "category": "AI",
+  "live_url": "",
+  "repo_name": "awesomegeniev2",
+  "repo_link": true,
+  "image": "/projects/awesome-genie-v2.webp",
+  "fetch": true
+}
