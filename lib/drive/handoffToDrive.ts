@@ -8,6 +8,7 @@ import {
 } from "@/lib/data/fileRepository";
 import { getRequirementMemory } from "@/lib/data/requirementsRepository";
 import type { GeneratedProjectBrief } from "@/lib/brief/generateProjectBrief";
+import { renderProjectBriefDocx } from "@/lib/brief/renderProjectBriefDocx";
 import {
   createGoogleDriveClient,
   getGoogleDriveRootFolderId,
@@ -73,14 +74,37 @@ export async function handoffBriefToDrive({
       listUploadedFilesForSession(sessionId),
       listDocumentSourcesForSession(sessionId)
     ]);
-    const briefFile = await uploadTextFile({
-      name: `${sanitizeDriveName(brief.title)}.md`,
+    const briefDocxBuffer = await renderProjectBriefDocx({
+      title: brief.title,
+      contentMarkdown: brief.contentMarkdown
+    });
+    const briefFile = await uploadBufferFile({
+      name: `${sanitizeDriveName(brief.title)}.docx`,
+      parentId: generatedFolderId,
+      buffer: briefDocxBuffer,
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    });
+
+    await uploadTextFile({
+      name: "Project Brief.md",
       parentId: generatedFolderId,
       content: brief.contentMarkdown,
       mimeType: "text/markdown"
     });
 
     await Promise.all([
+      uploadTextFile({
+        name: "Discovery Notes.md",
+        parentId: generatedFolderId,
+        content: buildDiscoveryNotes(messages, documentSources),
+        mimeType: "text/markdown"
+      }),
+      uploadTextFile({
+        name: "Lead Details.md",
+        parentId: generatedFolderId,
+        content: buildLeadDetails(memory),
+        mimeType: "text/markdown"
+      }),
       uploadTextFile({
         name: "requirements.json",
         parentId: generatedFolderId,
@@ -231,13 +255,18 @@ export async function handoffBriefToDrive({
           mimeType,
           body: Readable.from(buffer)
         },
-        fields: "id",
+        fields: "id, webViewLink",
         supportsAllDrives: true
       });
 
       if (!file.data.id) {
         throw new Error("Google Drive did not return an uploaded file ID.");
       }
+
+      return {
+        id: file.data.id,
+        webViewLink: file.data.webViewLink ?? null
+      };
     }
 
   } catch (error) {
@@ -301,6 +330,53 @@ function buildInternalNotes({
     `- Uploaded file count: ${uploadedFilesCount}`,
     `- Service type: ${typeof memory.service_type === "string" ? memory.service_type : "Not specified"}`,
     "- Review missing information before scoping or quoting."
+  ].join("\n");
+}
+
+function buildDiscoveryNotes(
+  messages: Awaited<ReturnType<typeof listChatMessages>>,
+  documentSources: Awaited<ReturnType<typeof listDocumentSourcesForSession>>
+) {
+  const transcript = messages
+    .map((message) => `- ${message.role}: ${message.content}`)
+    .join("\n");
+  const sources = documentSources.length > 0
+    ? documentSources
+        .map((source) => `- ${source.uploaded_file_id}: ${source.extracted_text.slice(0, 300)}`)
+        .join("\n")
+    : "- No uploaded document sources were used.";
+
+  return [
+    "# Discovery Notes",
+    "",
+    "## Conversation Transcript",
+    transcript || "No conversation messages found.",
+    "",
+    "## Uploaded Document Signals",
+    sources
+  ].join("\n");
+}
+
+function buildLeadDetails(memory: Record<string, unknown>) {
+  const get = (key: string) => {
+    const value = memory[key];
+    return value === null || value === undefined || String(value).trim().length === 0
+      ? "Not provided"
+      : String(value);
+  };
+
+  return [
+    "# Lead Details",
+    "",
+    `- Company: ${get("company_name")}`,
+    `- Contact: ${get("contact_name")}`,
+    `- Email: ${get("email")}`,
+    `- Role: ${get("contact_role")}`,
+    `- Preferred next step: ${get("preferred_next_step")}`,
+    `- Timeline: ${get("timeline")}`,
+    `- Budget range: ${get("budget_range")}`,
+    `- Service type: ${get("service_type")}`,
+    `- Recommended direction: ${get("recommended_direction")}`
   ].join("\n");
 }
 

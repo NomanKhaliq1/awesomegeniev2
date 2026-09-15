@@ -159,6 +159,31 @@ export async function updateSessionProgress({
   return data;
 }
 
+export async function completeChatSession(sessionId: string) {
+  const supabase = createOptionalSupabaseServiceClient();
+
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("chat_sessions")
+    .update({
+      status: "completed",
+      completed_at: new Date().toISOString()
+    })
+    .eq("id", sessionId)
+    .select("*")
+    .maybeSingle<ChatSessionRow>();
+
+  if (error) {
+    console.error("Supabase completeChatSession failed:", error.message);
+    return null;
+  }
+
+  return data;
+}
+
 export async function saveConversationSummary({
   sessionId,
   summary,

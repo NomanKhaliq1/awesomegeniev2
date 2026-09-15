@@ -11,7 +11,16 @@ export async function answerWithSessionDocuments({
   question: string;
   minScore?: number;
 }) {
-  const chunks = await retrieveDocumentChunksFromPinecone(sessionId, question, 5);
+  let chunks: any[] = [];
+  try {
+    chunks = await retrieveDocumentChunksFromPinecone(sessionId, question, 5);
+  } catch (error) {
+    console.error("[Pinecone Error] Failed to retrieve document chunks:", error);
+    return {
+      answer: null,
+      chunks: []
+    };
+  }
   const resolvedMinScore =
     minScore ?? (await getSystemSetting<number>("document_rag_min_match_score"));
   const confidentChunks = chunks.filter((chunk) => chunk.score >= resolvedMinScore);

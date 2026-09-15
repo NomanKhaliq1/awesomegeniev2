@@ -35,7 +35,11 @@ async function main() {
   }
 
   const { google } = await import("googleapis");
-  const auth = hasOAuth ? createOAuthAuth(google) : createServiceAccountAuth(google);
+  const hasServiceAccount = Boolean(process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY);
+  const auth = hasOAuth ? createOAuthAuth(google) : (hasServiceAccount ? createServiceAccountAuth(google) : undefined);
+  if (!auth) {
+    throw new Error("No Google OAuth or service account credentials configured.");
+  }
   const drive = google.drive({
     version: "v3",
     auth

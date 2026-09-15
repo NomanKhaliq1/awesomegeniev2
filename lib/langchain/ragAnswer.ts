@@ -14,13 +14,22 @@ export async function answerWithWebsiteRag({
   question: string;
   minScore?: number;
 }) {
-  const chunks = await retrieveWebsiteChunksFromPinecone(question, 5);
-  await logRetrieval({
-    sessionId,
-    namespace: getWebsiteNamespace(),
-    query: question,
-    matches: chunks
-  });
+  let chunks: any[] = [];
+  try {
+    chunks = await retrieveWebsiteChunksFromPinecone(question, 5);
+    await logRetrieval({
+      sessionId,
+      namespace: getWebsiteNamespace(),
+      query: question,
+      matches: chunks
+    });
+  } catch (error) {
+    console.error("[Pinecone Error] Failed to retrieve website chunks:", error);
+    return {
+      answer: null,
+      chunks: []
+    };
+  }
 
   const resolvedMinScore =
     minScore ?? (await getSystemSetting<number>("rag_min_match_score"));

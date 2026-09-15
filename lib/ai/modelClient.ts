@@ -1,6 +1,7 @@
 import { env } from "@/lib/env";
 import { logAiUsage } from "@/lib/data/aiUsageRepository";
 import { startLangSmithRun } from "@/lib/langsmith/tracing";
+import { runtimeDebug } from "@/lib/runtimeLogger";
 
 type GenerateTextInput = {
   provider?: string;
@@ -34,6 +35,34 @@ export async function generateWithLlm(input: Omit<GenerateTextInput, "provider" 
     temperature: input.temperature ?? 0.3,
     task: input.task ?? "llm"
   });
+}
+
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  retries = 8,
+  delay = 1000
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    const errStr = String(error);
+    const isRateLimit = errStr.includes("429") || errStr.toLowerCase().includes("rate limit") || errStr.toLowerCase().includes("too many requests");
+    const isDailyTokenLimit =
+      errStr.toLowerCase().includes("tokens per day") ||
+      errStr.toLowerCase().includes("tpd") ||
+      errStr.toLowerCase().includes("try again in");
+
+    if (isDailyTokenLimit) {
+      throw error;
+    }
+
+    if (retries > 0 && isRateLimit) {
+      console.warn(`[AI Client] Rate limit hit. Retrying in ${delay}ms... (${retries} retries left). Error: ${errStr}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return retryWithBackoff(fn, retries - 1, delay * 2);
+    }
+    throw error;
+  }
 }
 
 async function generateText({
@@ -76,39 +105,95 @@ async function generateText({
   });
 
   try {
-    let content: string;
+    const callModel = async (currentModel: string) => {
+      if (normalizedProvider === "groq") {
+        return generateOpenAiCompatible({
+          url: "https://api.groq.com/openai/v1/chat/completions",
+          apiKey: env.GROQ_API_KEY,
+          model: currentModel,
+          messages,
+          temperature,
+          provider: normalizedProvider,
+          task
+        });
+      } else if (normalizedProvider === "openai") {
+        return generateOpenAiCompatible({
+          url: "https://api.openai.com/v1/chat/completions",
+          apiKey: env.OPENAI_API_KEY,
+          model: currentModel,
+          messages,
+          temperature,
+          provider: normalizedProvider,
+          task
+        });
+      } else if (normalizedProvider === "openrouter") {
+        return generateOpenAiCompatible({
+          url: "https://openrouter.ai/api/v1/chat/completions",
+          apiKey: env.OPENROUTER_API_KEY,
+          model: currentModel,
+          messages,
+          temperature,
+          provider: normalizedProvider,
+          task
+        });
+      } else if (normalizedProvider === "gemini" || normalizedProvider === "google") {
+        return generateGemini({
+          model: currentModel,
+          system,
+          user,
+          temperature,
+          provider: normalizedProvider,
+          task
+        });
+      } else {
+        throw new Error(`Unsupported model provider: ${provider}`);
+      }
+    };
 
-    if (normalizedProvider === "groq") {
-      content = await generateOpenAiCompatible({
-        url: "https://api.groq.com/openai/v1/chat/completions",
-        apiKey: env.GROQ_API_KEY,
-        model,
-        messages,
-        temperature,
-        provider: normalizedProvider,
-        task
-      });
-    } else if (normalizedProvider === "openrouter") {
-      content = await generateOpenAiCompatible({
-        url: "https://openrouter.ai/api/v1/chat/completions",
-        apiKey: env.OPENROUTER_API_KEY,
-        model,
-        messages,
-        temperature,
-        provider: normalizedProvider,
-        task
-      });
-    } else if (normalizedProvider === "gemini" || normalizedProvider === "google") {
-      content = await generateGemini({
-        model,
-        system,
-        user,
-        temperature,
-        provider: normalizedProvider,
-        task
-      });
-    } else {
-      throw new Error(`Unsupported model provider: ${provider}`);
+    let content!: string;
+    try {
+      content = await retryWithBackoff(() => callModel(model));
+    } catch (error: any) {
+      if (normalizedProvider === "groq") {
+        const errorType = error.constructor?.name || "Error";
+        const errorMsg = error.message || String(error);
+        console.warn(`[AI Client] Groq model ${model} failed, trying model fallback... Error: ${errorMsg}`);
+
+        const groqModels = [
+          "llama-3.1-8b-instant",
+          "llama-3.3-70b-versatile",
+          "meta-llama/llama-4-scout-17b-16e-instruct",
+          "openai/gpt-oss-20b"
+        ];
+        let fallbackSuccess = false;
+        for (const fallbackModel of groqModels) {
+          if (fallbackModel === model) continue;
+          const fallbackStartTime = Date.now();
+          try {
+            runtimeDebug(`[AI Client] Trying Groq fallback model: ${fallbackModel}`);
+            content = await retryWithBackoff(() => callModel(fallbackModel), 2, 500);
+
+            runtimeDebug(`[Groq Fallback Log] FALLBACK_EVENT:`, JSON.stringify({
+              primaryModel: model,
+              fallbackModel,
+              reason: errorMsg,
+              errorType,
+              latency: Date.now() - fallbackStartTime,
+              testCaseId: process.env.QA_TEST_CASE_ID || null
+            }, null, 2));
+
+            fallbackSuccess = true;
+            break;
+          } catch (fallbackError: any) {
+            console.warn(`[AI Client] Groq fallback model ${fallbackModel} failed:`, fallbackError.message || fallbackError);
+          }
+        }
+        if (!fallbackSuccess) {
+          throw error;
+        }
+      } else {
+        throw error;
+      }
     }
 
     await trace?.end({
@@ -158,7 +243,8 @@ async function generateOpenAiCompatible({
     body: JSON.stringify({
       model,
       messages,
-      temperature
+      temperature,
+      max_tokens: 2048
     })
   });
 

@@ -1,4 +1,4 @@
-import { generateWithLlm } from "@/lib/ai/modelClient";
+import { getLangChainModel } from "@/lib/langchain/model";
 import { getLatestConversationSummary, listChatMessages } from "@/lib/data/chatRepository";
 import {
   listDocumentSourcesForSession,
@@ -53,18 +53,24 @@ export async function generateProjectBrief(sessionId: string): Promise<Generated
     getPromptTemplate("brief.generate_system"),
     getPromptTemplate("brief.generate_user")
   ]);
-  const contentMarkdown = await generateWithLlm({
-    system,
-    user: renderTemplate(userTemplate, {
-      structuredMemory: JSON.stringify(requirement?.structured_memory ?? {}, null, 2),
-      conversationSummary: latestSummary?.summary ?? "",
-      recentConversation,
-      uploadedFiles: uploadedFileSummary || "No uploaded files.",
-      uploadedDocumentText: documentSummary || "No readable uploaded document text.",
-      missingFields: inferMissingFields(requirement?.structured_memory ?? {}).join(", ")
-    }),
-    temperature: 0.2
+
+  const model = getLangChainModel({ temperature: 0.2 });
+  const userPrompt = renderTemplate(userTemplate, {
+    structuredMemory: JSON.stringify(requirement?.structured_memory ?? {}, null, 2),
+    conversationSummary: latestSummary?.summary ?? "",
+    recentConversation,
+    uploadedFiles: uploadedFileSummary || "No uploaded files.",
+    uploadedDocumentText: documentSummary || "No readable uploaded document text.",
+    missingFields: inferMissingFields(requirement?.structured_memory ?? {}).join(", ")
   });
+
+  const response = await model.invoke([
+    { role: "system", content: system },
+    { role: "user", content: userPrompt }
+  ]);
+
+  const contentMarkdown = response.content as string;
+
   const title = inferBriefTitle(requirement?.structured_memory ?? {});
   const brief = await upsertProjectBrief({
     sessionId,
@@ -89,12 +95,32 @@ export async function generateProjectBrief(sessionId: string): Promise<Generated
 }
 
 function inferBriefTitle(memory: Record<string, unknown>) {
-  const rawServiceType = typeof memory.service_type === "string" ? memory.service_type : "Project";
+  const rawServiceType = cleanTitlePart(memory.service_type) ?? "Project";
   const serviceType =
     rawServiceType.length > 48 ? `${rawServiceType.slice(0, 45).trim()}...` : rawServiceType;
-  const companyName = typeof memory.company_name === "string" ? memory.company_name : "Client";
+  const companyName = cleanTitlePart(memory.company_name) ?? "Client";
 
   return `${companyName} - ${serviceType} Brief`;
+}
+
+// Clean title helper function
+function cleanTitlePart(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+
+  if (
+    !trimmedValue ||
+    ["null", "undefined", "unknown", "not specified", "n/a"].includes(
+      trimmedValue.toLowerCase()
+    )
+  ) {
+    return null;
+  }
+
+  return trimmedValue;
 }
 
 function inferMissingFields(memory: Record<string, unknown>) {

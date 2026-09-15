@@ -1,5 +1,5 @@
 import { generateProjectBrief } from "@/lib/brief/generateProjectBrief";
-import { updateSessionProgress } from "@/lib/data/chatRepository";
+import { completeChatSession, updateSessionProgress } from "@/lib/data/chatRepository";
 import { handoffBriefToDrive, type DriveHandoffResult } from "@/lib/drive/handoffToDrive";
 
 export type CompleteOnboardingResult = {
@@ -26,6 +26,7 @@ export async function completeOnboarding(sessionId: string): Promise<CompleteOnb
     missingFields: [],
     status: "ready_to_complete"
   });
+  await completeChatSession(sessionId);
 
   return {
     status: "complete",

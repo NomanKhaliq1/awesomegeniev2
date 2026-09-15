@@ -16,6 +16,23 @@ export function getGoogleDriveRootFolderId() {
 }
 
 export function createGoogleDriveClient() {
+  if (isServiceAccountConfigured()) {
+    if (!env.GOOGLE_CLIENT_EMAIL || !env.GOOGLE_PRIVATE_KEY) {
+      throw new Error("Google Drive credentials are not configured.");
+    }
+
+    const auth = new google.auth.JWT({
+      email: env.GOOGLE_CLIENT_EMAIL,
+      key: normalizePrivateKey(env.GOOGLE_PRIVATE_KEY),
+      scopes: [driveScope]
+    });
+
+    return google.drive({
+      version: "v3",
+      auth
+    });
+  }
+
   if (isGoogleOAuthConfigured()) {
     const auth = createGoogleOAuthClient();
 
@@ -29,20 +46,7 @@ export function createGoogleDriveClient() {
     });
   }
 
-  if (!env.GOOGLE_CLIENT_EMAIL || !env.GOOGLE_PRIVATE_KEY) {
-    throw new Error("Google Drive credentials are not configured.");
-  }
-
-  const auth = new google.auth.JWT({
-    email: env.GOOGLE_CLIENT_EMAIL,
-    key: normalizePrivateKey(env.GOOGLE_PRIVATE_KEY),
-    scopes: [driveScope]
-  });
-
-  return google.drive({
-    version: "v3",
-    auth
-  });
+  throw new Error("Google Drive credentials are not configured.");
 }
 
 export function createGoogleOAuthClient() {

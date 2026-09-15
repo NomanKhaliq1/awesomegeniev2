@@ -174,7 +174,9 @@ async function checkSupabasePrompts() {
     "document_rag.answer_system",
     "document_rag.answer_user",
     "brief.generate_system",
-    "brief.generate_user"
+    "brief.generate_user",
+    "summary.rollup_system",
+    "summary.rollup_user"
   ];
 
   const { data, error } = await supabase

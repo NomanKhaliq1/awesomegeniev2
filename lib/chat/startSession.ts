@@ -1,7 +1,7 @@
 import { createChatSession, saveChatMessage } from "@/lib/data/chatRepository";
 import { getPromptTemplate } from "@/lib/data/settingsRepository";
 import { ensureClientRequirement } from "@/lib/data/requirementsRepository";
-import { getDefaultMissingFields } from "@/lib/onboarding/defaultFields";
+import { getDefaultMissingFields } from "@/lib/onboarding/fields";
 
 export type ChatSession = {
   id: string;
@@ -20,6 +20,7 @@ export async function startSession(): Promise<ChatSession> {
     getPromptTemplate("chat.opening_message"),
     getPromptTemplate("chat.first_question")
   ]);
+  const initialMessage = `${openingMessage}\n\n${firstQuestion}`.trim();
   const persistedSession = await createChatSession({
     completionScore: 0,
     missingFields
@@ -33,9 +34,9 @@ export async function startSession(): Promise<ChatSession> {
     await saveChatMessage({
       sessionId: persistedSession.id,
       role: "assistant",
-      content: openingMessage,
+      content: initialMessage,
       metadata: {
-        kind: "opening_message"
+        kind: "initial_message"
       }
     });
 
@@ -46,8 +47,8 @@ export async function startSession(): Promise<ChatSession> {
       completionScore: persistedSession.completion_score,
       missingFields: persistedSession.missing_fields,
       status: persistedSession.status,
-      openingMessage,
-      firstQuestion
+      openingMessage: initialMessage,
+      firstQuestion: ""
     };
   }
 
@@ -58,7 +59,7 @@ export async function startSession(): Promise<ChatSession> {
     completionScore: 0,
     missingFields,
     status: "collecting_core",
-    openingMessage,
-    firstQuestion
+    openingMessage: initialMessage,
+    firstQuestion: ""
   };
 }

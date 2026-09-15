@@ -40,6 +40,38 @@ export async function getSystemSetting<T>(key: string, fallback?: T): Promise<T>
   return data.value as T;
 }
 
+export async function setSystemSetting({
+  key,
+  value,
+  description
+}: {
+  key: string;
+  value: unknown;
+  description?: string;
+}) {
+  const supabase = createOptionalSupabaseServiceClient();
+
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase.from("system_settings").upsert(
+    {
+      key,
+      value,
+      description,
+      updated_at: new Date().toISOString()
+    },
+    {
+      onConflict: "key"
+    }
+  );
+
+  if (error) {
+    console.error(`Supabase setSystemSetting failed for ${key}:`, error.message);
+  }
+}
+
 export async function getPromptTemplate(name: string, fallback?: string) {
   const supabase = createOptionalSupabaseServiceClient();
 

@@ -13,6 +13,24 @@ export type ProjectBriefRow = {
   updated_at: string;
 };
 
+export async function getLatestProjectBrief(sessionId: string) {
+  const supabase = createOptionalSupabaseServiceClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("project_briefs")
+    .select("*")
+    .eq("session_id", sessionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<ProjectBriefRow>();
+
+  if (error) {
+    throw new Error(`Supabase read latest project_briefs failed: ${error.message}`);
+  }
+  return data;
+}
+
 export async function upsertProjectBrief(input: {
   sessionId: string;
   requirementId?: string | null;

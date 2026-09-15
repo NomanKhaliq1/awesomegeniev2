@@ -19,7 +19,10 @@ export function FileUpload({
   onUpload
 }: FileUploadProps) {
   return (
-    <label className={styles.upload}>
+    <label
+      aria-disabled={disabled}
+      className={`${styles.upload} ${disabled ? styles.disabled : ""}`}
+    >
       <input
         aria-label={ariaLabel}
         type="file"

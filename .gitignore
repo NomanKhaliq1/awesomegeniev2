@@ -6,3 +6,10 @@ node_modules
 dist
 coverage
 *.tsbuildinfo
+.next-dev*.log
+dev-server.log
+*.log
+scratch/
+chats-convo/
+supabase/*_rows.csv
+*.zip

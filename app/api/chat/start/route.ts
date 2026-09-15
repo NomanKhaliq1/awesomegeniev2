@@ -3,6 +3,7 @@ import { rateLimit } from "@/lib/api/rateLimit";
 import { getSystemSetting } from "@/lib/data/settingsRepository";
 import { startSession } from "@/lib/chat/startSession";
 import { getStateLabel, type OnboardingState } from "@/lib/onboarding/stateMachine";
+import { buildInitialFlowDetector } from "@/lib/chat/flowDetector";
 
 export async function POST(request: NextRequest) {
   const limited = rateLimit(request, {
@@ -27,6 +28,7 @@ export async function POST(request: NextRequest) {
       statusLabel,
       message: openingMessage,
       firstQuestion,
+      flowDetector: buildInitialFlowDetector(),
       appText
     });
   } catch (error) {

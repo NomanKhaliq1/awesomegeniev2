@@ -128,10 +128,41 @@ export async function updateRequirementMemory({
     return null;
   }
 
-  const nextMemory = {
-    ...(requirement.structured_memory ?? {}),
-    ...memory
+  const cleanValue = (v: any) => {
+    if (v === null || v === undefined) return null;
+    const str = String(v).trim();
+    if (str === "" || str === "null" || str === "undefined") return null;
+    return v;
   };
+
+  const cleanedMemory: RequirementMemory = {};
+  const fieldsToRemove = new Set<string>();
+  for (const [key, value] of Object.entries(memory)) {
+    if (value === null) {
+      fieldsToRemove.add(key);
+      continue;
+    }
+    const val = cleanValue(value);
+    if (val !== null) {
+      cleanedMemory[key] = val;
+    }
+  }
+
+  const cleanedExistingMemory: RequirementMemory = {};
+  for (const [key, value] of Object.entries(requirement.structured_memory ?? {})) {
+    const val = cleanValue(value);
+    if (val !== null) {
+      cleanedExistingMemory[key] = val;
+    }
+  }
+
+  const nextMemory = {
+    ...cleanedExistingMemory,
+    ...cleanedMemory
+  };
+  for (const key of fieldsToRemove) {
+    delete nextMemory[key];
+  }
 
   const { data, error } = await supabase
     .from("client_requirements")
@@ -147,13 +178,16 @@ export async function updateRequirementMemory({
     return null;
   }
 
-  const valueRows = Object.entries(memory).map(([fieldKey, value]) => ({
-    requirement_id: requirement.id,
-    field_key: fieldKey,
-    value: value === null || value === undefined ? null : String(value),
-    value_json: { value },
-    source_message_id: sourceMessageId
-  }));
+  const valueRows = Object.entries(memory).map(([fieldKey, value]) => {
+    const val = cleanValue(value);
+    return {
+      requirement_id: requirement.id,
+      field_key: fieldKey,
+      value: val === null ? null : String(val),
+      value_json: { value: val },
+      source_message_id: sourceMessageId
+    };
+  });
 
   if (valueRows.length > 0) {
     const { error: valuesError } = await supabase

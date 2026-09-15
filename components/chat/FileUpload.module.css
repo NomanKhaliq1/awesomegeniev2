@@ -2,14 +2,37 @@
   align-items: center;
   background: var(--rose-50);
   border: 1px solid var(--rose-100);
-  border-radius: 8px;
+  border-radius: 12px;
   color: var(--brand-red);
+  cursor: pointer;
   display: inline-flex;
   font-weight: 900;
   gap: 8px;
   min-height: 56px;
   justify-content: center;
-  padding: 0 14px;
+  padding: 0 20px;
+  box-shadow: 0 2px 8px rgba(181, 33, 47, 0.02);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.upload:hover:not(.disabled) {
+  background: var(--rose-100);
+  border-color: var(--brand-red-muted);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(181, 33, 47, 0.08);
+}
+
+.upload:active:not(.disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 2px 4px rgba(181, 33, 47, 0.04);
+}
+
+.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  background: var(--rose-25);
+  border-color: var(--border-neutral);
+  color: var(--text-muted);
 }
 
 .upload input {
@@ -22,4 +45,10 @@
 .upload svg {
   height: 18px;
   width: 18px;
+  transition: transform 0.25s ease;
 }
+
+.upload:hover:not(.disabled) svg {
+  transform: rotate(15deg);
+}
+
