@@ -96,24 +96,6 @@ export function buildInitialFlowDetector(): FlowDetector {
   };
 }
 
-export function buildCompletedFlowDetector(): FlowDetector {
-  return {
-    currentStage: "drive_handoff",
-    currentStageLabel: "Complete",
-    expectedNextQuestion: null,
-    routeIntent: "handoff_complete",
-    ragMode: "off",
-    canRecommend: true,
-    canCaptureLead: true,
-    warning: null,
-    steps: flowOrder.map((step) => ({
-      stage: step.stage,
-      label: step.label,
-      status: "done"
-    }))
-  };
-}
-
 function getStageLabel(stage: DiscoveryStage) {
   return flowOrder.find((step) => step.stage === stage)?.label ?? stage;
 }

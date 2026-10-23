@@ -426,18 +426,10 @@ export async function getMissingRequiredFields(memory: RequirementMemory): Promi
   const fields = await getCoreRequiredFields(memory);
   const skipBusinessContext = hasBusinessContext(memory);
   const industry = detectIndustry(memory);
-  const memoryText = getMemoryText(memory);
   const skipWorkflowContext =
     industry ? hasWorkflowContextForIndustry(memory, industry) : false;
 
   return fields.filter((field) => {
-    if (
-      field.key === "traffic_volume" &&
-      !/\b(website|web site|landing page|web portal|website traffic)\b/i.test(memoryText)
-    ) {
-      return false;
-    }
-
     if (skipBusinessContext && BUSINESS_CONTEXT_KEYS.includes(field.key)) {
       return false;
     }
@@ -506,11 +498,8 @@ export async function getDefaultMissingFields() {
 export async function calculateCompletionScore(memory: RequirementMemory) {
   const fields = await getCoreRequiredFields(memory);
   const missingFields = await getMissingRequiredFields(memory);
-  const scoredFields = fields.filter((field) => field.priority !== "optional");
-  const missingKeys = new Set(missingFields.map((field) => field.key));
-  const completedCount = scoredFields.filter((field) => !missingKeys.has(field.key)).length;
+  const missingCount = missingFields.length;
+  const completedCount = fields.length - missingCount;
 
-  return scoredFields.length > 0
-    ? Math.round((completedCount / scoredFields.length) * 100)
-    : 100;
+  return Math.round((completedCount / fields.length) * 100);
 }

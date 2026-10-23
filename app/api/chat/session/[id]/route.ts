@@ -8,8 +8,7 @@ import { getSystemSetting } from "@/lib/data/settingsRepository";
 import { getCollectedFieldLabels } from "@/lib/onboarding/fieldLabels";
 import { getStateLabel, type OnboardingState } from "@/lib/onboarding/stateMachine";
 import { evaluateConversationState } from "@/lib/onboarding/conversationStateManager";
-import { buildCompletedFlowDetector, buildFlowDetector } from "@/lib/chat/flowDetector";
-import { getSessionFeedback } from "@/lib/data/feedbackRepository";
+import { buildFlowDetector } from "@/lib/chat/flowDetector";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +22,11 @@ export async function GET(_request: Request, context: RouteContext) {
   const session = await getChatSession(context.params.id);
 
   if (session) {
-    const [messages, appText, statusLabel, memory, feedback] = await Promise.all([
+    const [messages, appText, statusLabel, memory] = await Promise.all([
       listChatMessages(context.params.id),
       getSystemSetting("app_text_labels"),
       getStateLabel(normalizeOnboardingState(session.status)),
-      getRequirementMemory(context.params.id),
-      getSessionFeedback(context.params.id)
+      getRequirementMemory(context.params.id)
     ]);
 
     const recentConversation = messages
@@ -54,20 +52,16 @@ export async function GET(_request: Request, context: RouteContext) {
           completionScore: session.completion_score,
           missingFields: session.missing_fields,
           status: session.status,
-          completed: session.status === "completed",
           persisted: true
         },
         statusLabel,
         appText,
         collectedFields: getCollectedFieldLabels(memory),
-        feedback,
-        flowDetector: session.status === "completed"
-          ? buildCompletedFlowDetector()
-          : buildFlowDetector({
-              state: flowState,
-              routeDecision: routeIntent ? { intent: routeIntent as any } : null,
-              ragMode
-            }),
+        flowDetector: buildFlowDetector({
+          state: flowState,
+          routeDecision: routeIntent ? { intent: routeIntent as any } : null,
+          ragMode
+        }),
         messages: messages.map((message) => ({
           id: message.id,
           role: message.role,
@@ -121,8 +115,7 @@ function normalizeOnboardingState(status: string): OnboardingState {
     status === "collecting_core" ||
     status === "collecting_service_details" ||
     status === "ready_for_files" ||
-    status === "ready_to_complete" ||
-    status === "completed"
+    status === "ready_to_complete"
   ) {
     return status;
   }

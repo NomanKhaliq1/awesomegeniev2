@@ -325,28 +325,43 @@ export function isContextContinuation(message: string) {
 }
 
 export function wantsProjectBriefGeneration(message: string) {
-  const normalized = message.toLowerCase();
-  return (
-    /project brief/i.test(normalized) ||
-    /project summary/i.test(normalized) ||
-    /prepare .*project brief/i.test(normalized) ||
-    /create .*project brief/i.test(normalized) ||
-    /generate .*project brief/i.test(normalized) ||
-    /prepare .*summary/i.test(normalized) ||
-    /create .*summary/i.test(normalized) ||
-    /generate .*summary/i.test(normalized) ||
-    /based on .*already shared/i.test(normalized) ||
-    /based on what we.*shared/i.test(normalized) ||
-    /details .*already shared/i.test(normalized) ||
-    /before the scoping session/i.test(normalized) ||
-    /for now, can you prepare/i.test(normalized) ||
-    /use the details already shared/i.test(normalized) ||
-    /use the information already (?:collected|shared)/i.test(normalized) ||
+  const normalized = message
+    .toLowerCase()
+    .replace(/[’‘]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) return false;
+
+  const explicitBriefNoun = /\b(project brief|official brief|implementation brief|project summary|handoff summary|brief)\b/i.test(normalized);
+  const explicitCreationVerb = /\b(prepare|create|generate|make|draft|produce|compile|write|bana(?:o|do)?|banado|tay+ar|tay+yar)\b/i.test(normalized);
+  const useExistingContext =
+    /based on (?:what|the details|the information).*(?:shared|collected)/i.test(normalized) ||
+    /(?:details|information).*(?:already|pehle).*(?:shared|collected|di|batayi)/i.test(normalized) ||
+    /use (?:the )?(?:details|information).*(?:shared|collected)/i.test(normalized) ||
     /do not ask another question/i.test(normalized) ||
-    /sales and implementation teams/i.test(normalized) ||
-    /handoff summary/i.test(normalized) ||
-    /implementation brief/i.test(normalized)
-  );
+    /ab (?:brief|summary).*(?:bana|tay+ar)/i.test(normalized);
+  const bareBriefCommand = /^(?:project )?brief(?: now| please)?[.!]?$/i.test(normalized);
+
+  return bareBriefCommand || (explicitBriefNoun && explicitCreationVerb) || (explicitBriefNoun && useExistingContext);
+}
+
+export function shouldGenerateProjectBriefNow({
+  message,
+  activeProjectContext
+}: {
+  message: string;
+  activeProjectContext: boolean;
+}) {
+  if (!activeProjectContext || !wantsProjectBriefGeneration(message)) {
+    return false;
+  }
+
+  const normalized = message.toLowerCase();
+  const isRevision = /\b(update|revise|edit|adjust|change|correct|modify)\b.*\bbrief\b|\bbrief\b.*\b(update|revision|changes?|correction)\b/i.test(normalized);
+  const isApprovalOrHandoff = /\b(looks good|approved|consider this ready|ready for (?:sales|implementation)|handoff package|lead handoff|save .*brief|send .*sales)\b/i.test(normalized);
+
+  return !isRevision && !isApprovalOrHandoff;
 }
 
 export function hasGeneratedProjectBrief(recentConversation: string): boolean {

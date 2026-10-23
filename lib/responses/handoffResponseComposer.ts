@@ -253,33 +253,8 @@ export async function composeLeadHandoffPackageResponse({
     }
   }
 
-  const contactName = String(collectedMemory.contact_name || "the primary contact");
-  const timeline = String(collectedMemory.timeline || "").trim();
-
-  if (targetLanguage === "roman_urdu") {
-    return [
-      "Theek hai, corrected project brief hamari sales aur implementation teams ke review ke liye tayar hai.",
-      "",
-      `Hamari team details review kar ke ${contactName} se scoping session coordinate karne ke liye follow up kare gi${timeline ? `, aur confirmed timeline yeh hai: ${timeline}.` : "."}`,
-      "",
-      "Session se pehle available workflow documents, process maps, sample status fields, borrower notification rules, current handoff points, reporting gaps, aur security ya access requirements share karna madadgar hoga.",
-      "",
-      "Aap filhal all set hain. Agar koi detail change ho to yahan share kar dein aur hum project notes update kar dein ge."
-    ].join("\n");
-  }
-
-  return [
-    "Great, the corrected project brief is ready for our sales and implementation teams.",
-    "",
-    `Our team will review the brief and workflow details and follow up with ${contactName} to coordinate the scoping session${timeline ? `, using the confirmed timeline: ${timeline}.` : "."}`,
-    "",
-    "Before the session, it would be helpful to share any available workflow documents, process maps, sample status fields, borrower notification rules, current handoff points, reporting gaps, and security or access requirements.",
-    "",
-    "You are all set for now. If anything changes, share it here and we will include it with the project notes."
-  ].join("\n");
-
   const isUploaded = driveResult?.status === "uploaded";
-  const leadId = sessionId ? `ABC-${(sessionId ?? "").slice(0, 8).toUpperCase()}` : "ABC-HANDOFF";
+  const leadId = sessionId ? `ABC-${sessionId.slice(0, 8).toUpperCase()}` : "ABC-HANDOFF";
   const folderLink = (isUploaded && driveResult && "folderId" in driveResult) ? `https://drive.google.com/drive/folders/${driveResult.folderId}` : null;
 
   const adminPatterns = [
@@ -355,16 +330,12 @@ export async function composeLeadHandoffPackageResponse({
       ].join("\n");
     }
 
-    const englishNextStep = cleanAvailability
-      ? `We'll review the project brief and workflow details before the workflow scoping session. Since your team is available ${cleanAvailability}, our team will confirm which slot works best.`
-      : `We'll review the project brief and workflow details before the workflow scoping session. Our team will follow up with the primary contact to confirm the best time.`;
-
     return [
       `Great, the project brief is ready for our sales and implementation teams.`,
       ``,
       `Next Step`,
       ``,
-      englishNextStep,
+      `We’ll review the project brief and workflow details before the workflow scoping session. Since your team is available ${cleanAvailability}, our team will confirm which slot works best.`,
       ``,
       `What to Prepare Before the Session`,
       ``,

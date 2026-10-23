@@ -1,5 +1,4 @@
 import type { RequirementMemory } from "@/lib/data/requirementsRepository";
-import { textContainsRejectedFact } from "@/lib/onboarding/conversationControl";
 import { evaluateConversationState } from "@/lib/onboarding/conversationStateManager";
 import { detectUserLanguage } from "./languageDetection";
 
@@ -294,41 +293,6 @@ export function enforceEarlyRecommendationGuard(
   userMessage: string,
   nextQuestion: string | null
 ): string {
-  const clientEvidence = [
-    userMessage,
-    ...recentConversation
-      .split(/\n(?=(?:user|assistant):)/i)
-      .filter((line) => /^user:/i.test(line.trim()))
-  ].join("\n");
-  const unsupportedSpecifics = [
-    /\bGLBA\b/i,
-    /\bCFPB\b/i,
-    /\bmulti-factor authentication\b|\bMFA\b/i,
-    /\bencryption architecture\b/i,
-    /\bsecure (?:loan|lending|servicing) platform\b/i,
-    /\bcustom (?:Encompass )?plugin\b/i,
-    /\binternal operations portal\b/i,
-    /\bEncompass\b/i,
-    /\bHubSpot\b/i,
-    /\bSalesforce\b/i
-  ];
-  const hasUnsupportedSpecific = unsupportedSpecifics.some(
-    (pattern) => pattern.test(response) && !pattern.test(clientEvidence)
-  ) || textContainsRejectedFact(response, collectedMemory);
-
-  if (hasUnsupportedSpecific) {
-    const question = nextQuestion || evaluateConversationState({
-      memory: collectedMemory,
-      recentConversation,
-      lastUserMessage: userMessage
-    }).nextQuestion;
-    const language = detectUserLanguage(userMessage);
-    const observation = language === "roman_urdu"
-      ? "Hum confirmed requirements ko product-neutral rakhte hue agla relevant detail clear karte hain."
-      : "We'll keep the discussion product-neutral and work only from the requirements you have confirmed.";
-    return question ? `${observation}\n\n${question}` : observation;
-  }
-
   const state = evaluateConversationState({
     memory: collectedMemory,
     recentConversation,

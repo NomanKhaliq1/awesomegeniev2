@@ -1,5 +1,4 @@
 import {
-  completeChatSession,
   getChatSession,
   saveChatMessage,
   updateSessionProgress
@@ -31,7 +30,8 @@ import {
   isContextContinuation,
   routeMessage,
   hasGeneratedProjectBrief,
-  wantsProjectBriefGeneration
+  wantsProjectBriefGeneration,
+  shouldGenerateProjectBriefNow
 } from "@/lib/agents/routerAgent";
 import { runGatekeeperAgent, containsRomanUrdu } from "@/lib/agents/gatekeeperAgent";
 import { getPromptTemplate } from "@/lib/data/settingsRepository";
@@ -64,14 +64,7 @@ import {
   hasBasicContext,
   isNextStepIntent
 } from "@/lib/chat/chatDiscoveryFlow";
-import { buildCompletedFlowDetector, buildFlowDetector, type FlowDetector } from "@/lib/chat/flowDetector";
-import { isExplicitHandoffApproval } from "@/lib/onboarding/completionRules";
-import { extractExactSectionReplacements } from "@/lib/brief/sectionRevision";
-import {
-  isBriefRevisionIntent,
-  isExplicitBriefGenerationIntent,
-  markConversationStage
-} from "@/lib/onboarding/conversationControl";
+import { buildFlowDetector, type FlowDetector } from "@/lib/chat/flowDetector";
 
 export type ChatResponse = {
   message: string;
@@ -81,7 +74,6 @@ export type ChatResponse = {
   status: string;
   statusLabel: string;
   persisted: boolean;
-  completed?: boolean;
   flowDetector?: FlowDetector;
 };
 
@@ -106,20 +98,6 @@ export async function handleMessage(
     };
   }
 
-  if (session?.status === "completed") {
-    return {
-      message: "This onboarding session is complete. Start a new chat to discuss another project.",
-      completionScore: session.completion_score,
-      missingFields: session.missing_fields,
-      collectedFields: getCollectedFieldLabels(await getRequirementMemory(sessionId)),
-      status: "completed",
-      statusLabel: await getStateLabel("completed"),
-      persisted: true,
-      completed: true,
-      flowDetector: buildCompletedFlowDetector()
-    };
-  }
-
   let persisted = false;
   let sourceMessageId: string | null = null;
 
@@ -134,57 +112,11 @@ export async function handleMessage(
     persisted = Boolean(userMessage);
   }
 
-  let currentMemory = session ? await getRequirementMemory(sessionId) : {};
+  const currentMemory = session ? await getRequirementMemory(sessionId) : {};
   const conversationContext = session
     ? await loadConversationContext(sessionId)
     : { summary: "", recentConversation: "" };
-  let currentStatus = session?.status ?? "collecting_core";
-  let capturedOnboardingResult: Awaited<ReturnType<typeof runDiscoveryOrchestrator>> | null = null;
-
-  async function captureTurnMemory() {
-    if (capturedOnboardingResult) {
-      return capturedOnboardingResult;
-    }
-
-    capturedOnboardingResult = await runDiscoveryOrchestrator(currentMemory, trimmedMessage, {
-      recentConversation: conversationContext.recentConversation
-    });
-    currentMemory = capturedOnboardingResult.nextMemory;
-
-    if (session) {
-      await updateRequirementMemory({
-        sessionId,
-        memory: capturedOnboardingResult.extractedMemory,
-        sourceMessageId
-      });
-
-      currentStatus = getOnboardingState({
-        completionScore: capturedOnboardingResult.completionScore,
-        missingFields: capturedOnboardingResult.missingFields,
-        memory: capturedOnboardingResult.nextMemory
-      });
-
-      await updateSessionProgress({
-        sessionId,
-        completionScore: capturedOnboardingResult.completionScore,
-        missingFields: capturedOnboardingResult.missingFields,
-        status: currentStatus
-      });
-
-      session.completion_score = capturedOnboardingResult.completionScore;
-      session.missing_fields = capturedOnboardingResult.missingFields;
-      session.status = currentStatus;
-    }
-
-    return capturedOnboardingResult;
-  }
-
-  const briefRevisionIntent = isBriefRevisionIntent(trimmedMessage);
-  const wantsBriefNow = isExplicitBriefGenerationIntent(trimmedMessage);
-
-  if (wantsBriefNow) {
-    await captureTurnMemory();
-  }
+  const currentStatus = session?.status ?? "collecting_core";
 
   const activeProjectContextForOverride = hasActiveProjectContext({
     collectedMemory: currentMemory,
@@ -192,7 +124,12 @@ export async function handleMessage(
     recentConversation: conversationContext.recentConversation
   });
 
-  if (wantsBriefNow && activeProjectContextForOverride && hasBasicContext(currentMemory)) {
+  if (
+    shouldGenerateProjectBriefNow({
+      message: trimmedMessage,
+      activeProjectContext: activeProjectContextForOverride
+    })
+  ) {
     const documentSources = session ? await listDocumentSourcesForSession(sessionId) : [];
     const cleanedResponse = repairMarkdownTables(
       composeProjectBriefResponse({
@@ -207,8 +144,8 @@ export async function handleMessage(
 
     const targetLanguage = detectUserLanguage(trimmedMessage);
     const prefix = targetLanguage === "roman_urdu"
-      ? "Haan, main un tafseelat ki bunyaad par jo aapne pehle hi share ki hain, ek project brief tayar kar sakta hoon."
-      : "Yes, I can prepare a project brief based on the details you’ve already shared.";
+      ? "Yeh raha project brief, jo ab tak share ki gayi details par based hai. Jo information confirm nahi hui, usay clearly open item rakha gaya hai."
+      : "Here is the project brief based on the details shared so far. Anything not yet confirmed is clearly marked as an open item.";
     let clientResponse = `${prefix}\n\n${cleanedResponse}`;
     clientResponse = ensureUniqueResponse(clientResponse, conversationContext.recentConversation, targetLanguage);
 
@@ -228,16 +165,6 @@ export async function handleMessage(
       } catch (e) {
         console.error("Failed to persist generated project brief in handleMessage:", e);
       }
-
-      await updateRequirementMemory({
-        sessionId,
-        memory: markConversationStage("brief_generated", "generated"),
-        sourceMessageId
-      });
-      currentMemory = {
-        ...currentMemory,
-        ...markConversationStage("brief_generated", "generated")
-      };
 
       const assistantMessage = await saveChatMessage({
         sessionId,
@@ -301,16 +228,6 @@ export async function handleMessage(
       needsKnowledge: false,
       serviceType: typeof currentMemory.service_type === "string" ? currentMemory.service_type : null
     };
-  }
-
-  const shouldCaptureProjectTurn =
-    !["greeting", "irrelevant", "file_upload"].includes(routeDecision.intent) &&
-    (activeProjectContext ||
-      routeDecision.intent === "discovery_session" ||
-      routeDecision.intent === "project_brief_generation");
-
-  if (shouldCaptureProjectTurn) {
-    await captureTurnMemory();
   }
 
   if (routeDecision.intent === "greeting") {
@@ -408,10 +325,9 @@ export async function handleMessage(
       }
     }
   }
-  const completesOnboarding = hasBrief && isExplicitHandoffApproval(trimmedMessage);
 
   if (
-    (completesOnboarding || (wantsLeadHandoffPackage && !briefRevisionIntent)) &&
+    (wantsLeadHandoffPackage || wantsFinalCloseAfterBrief) &&
     activeProjectContext &&
     (hasBrief || /corrected brief|project brief|brief/i.test(conversationContext.recentConversation)) &&
     routeDecision.intent !== "file_upload"
@@ -428,16 +344,6 @@ export async function handleMessage(
     const statusLabel = await getStateLabel(normalizeOnboardingState(currentStatus));
 
     if (session) {
-      const nextLifecycle = completesOnboarding
-        ? markConversationStage("handoff_complete", "handoff_complete")
-        : markConversationStage("scoping_ready", "approved");
-      await updateRequirementMemory({
-        sessionId,
-        memory: nextLifecycle,
-        sourceMessageId
-      });
-      currentMemory = { ...currentMemory, ...nextLifecycle };
-
       const assistantMessage = await saveChatMessage({
         sessionId,
         role: "assistant",
@@ -451,15 +357,6 @@ export async function handleMessage(
 
       await safeSummarizeConversation(sessionId);
       persisted = persisted && Boolean(assistantMessage);
-
-      if (completesOnboarding) {
-        const completedSession = await completeChatSession(sessionId);
-        if (completedSession) {
-          currentStatus = "completed";
-          session.status = "completed";
-          session.completed_at = completedSession.completed_at;
-        }
-      }
     }
 
     return {
@@ -468,14 +365,13 @@ export async function handleMessage(
       missingFields: session?.missing_fields ?? [],
       collectedFields: getCollectedFieldLabels(currentMemory),
       status: currentStatus,
-      statusLabel: completesOnboarding ? await getStateLabel("completed") : statusLabel,
-      persisted,
-      completed: completesOnboarding,
-      flowDetector: completesOnboarding ? buildCompletedFlowDetector() : undefined
+      statusLabel,
+      persisted
     };
   }
 
-  const wantsBriefRevision = briefRevisionIntent;
+  const wantsBriefRevision =
+    /update .*brief|revise .*brief|edit .*brief|adjust .*brief|change .*brief|update .*project brief|contact and company details|timeline sections?|timeline was also confirmed|contact .*confirmed|sarah mitchell|first phase|later phase|considered later|move .*later|mention that/i.test(trimmedMessage);
 
   if (
     wantsBriefRevision &&
@@ -490,9 +386,7 @@ export async function handleMessage(
       conversationSummary: conversationContext.summary
     });
     const targetLanguage = detectUserLanguage(trimmedMessage);
-    if (extractExactSectionReplacements(trimmedMessage).length === 0) {
-      cleanedResponse = ensureUniqueResponse(cleanedResponse, conversationContext.recentConversation, targetLanguage);
-    }
+    cleanedResponse = ensureUniqueResponse(cleanedResponse, conversationContext.recentConversation, targetLanguage);
     const statusLabel = await getStateLabel(normalizeOnboardingState(currentStatus));
 
     if (session) {
@@ -520,82 +414,6 @@ export async function handleMessage(
       statusLabel,
       persisted
     };
-  }
-
-  if (activeProjectContext && routeDecision.intent === "project_brief_generation") {
-    const hasBasic = hasBasicContext(currentMemory);
-    if (!hasBasic) {
-      routeDecision.intent = "discovery_session";
-    } else {
-      const documentSources = session ? await listDocumentSourcesForSession(sessionId) : [];
-      const cleanedResponse = repairMarkdownTables(
-        composeProjectBriefResponse({
-          userMessage: trimmedMessage,
-          collectedMemory: currentMemory,
-          conversationSummary: conversationContext.summary,
-          recentConversation: conversationContext.recentConversation,
-          documentSources
-        })
-      );
-      const statusLabel = await getStateLabel(normalizeOnboardingState(currentStatus));
-
-      const targetLanguage = detectUserLanguage(trimmedMessage);
-      const prefix = targetLanguage === "roman_urdu"
-        ? "Haan, mein hamari team ke review ke liye scoping session se pehle ek project brief tayar kar sakta hoon."
-        : "Yes, I can prepare a project brief for our team to review before the scoping session.";
-      let clientResponse = `${prefix}\n\n${cleanedResponse}`;
-      clientResponse = ensureUniqueResponse(clientResponse, conversationContext.recentConversation, targetLanguage);
-
-      if (session) {
-        try {
-          const title = `${currentMemory.company_name || "Client"} - Project Brief`;
-          const requirement = await getClientRequirement(sessionId);
-          await upsertProjectBrief({
-            sessionId,
-            requirementId: requirement?.id ?? null,
-            title,
-            contentMarkdown: cleanedResponse,
-            contentJson: {
-              structuredMemory: currentMemory
-            }
-          });
-        } catch (e) {
-          console.error("Failed to persist generated project brief in handleMessage:", e);
-        }
-
-        const generatedStage = markConversationStage("brief_generated", "generated");
-        await updateRequirementMemory({
-          sessionId,
-          memory: generatedStage,
-          sourceMessageId
-        });
-        currentMemory = { ...currentMemory, ...generatedStage };
-
-        const assistantMessage = await saveChatMessage({
-          sessionId,
-          role: "assistant",
-          content: clientResponse,
-          metadata: {
-            routeDecision,
-            status: currentStatus,
-            contextOverride: "project_brief_generation"
-          }
-        });
-
-        await safeSummarizeConversation(sessionId);
-        persisted = persisted && Boolean(assistantMessage);
-      }
-
-      return {
-        message: clientResponse,
-        completionScore: session?.completion_score ?? 0,
-        missingFields: session?.missing_fields ?? [],
-        collectedFields: getCollectedFieldLabels(currentMemory),
-        status: currentStatus,
-        statusLabel,
-        persisted
-      };
-    }
   }
 
   if (
@@ -908,11 +726,9 @@ export async function handleMessage(
     };
   }
 
-  const onboardingResult =
-    capturedOnboardingResult ??
-    (await runDiscoveryOrchestrator(currentMemory, trimmedMessage, {
-      recentConversation: conversationContext.recentConversation
-    }));
+  const onboardingResult = await runDiscoveryOrchestrator(currentMemory, trimmedMessage, {
+    recentConversation: conversationContext.recentConversation
+  });
 
   let assistantResponse: string;
   let targetQuestion = onboardingResult.nextQuestion;
@@ -995,13 +811,11 @@ export async function handleMessage(
   const statusLabel = await getStateLabel(response.status);
 
   if (session) {
-    if (!capturedOnboardingResult) {
-      await updateRequirementMemory({
-        sessionId,
-        memory: onboardingResult.extractedMemory,
-        sourceMessageId
-      });
-    }
+    await updateRequirementMemory({
+      sessionId,
+      memory: onboardingResult.extractedMemory,
+      sourceMessageId
+    });
 
     const assistantMessage = await saveChatMessage({
       sessionId,
@@ -1143,8 +957,7 @@ function normalizeOnboardingState(status: string): OnboardingState {
     status === "collecting_core" ||
     status === "collecting_service_details" ||
     status === "ready_for_files" ||
-    status === "ready_to_complete" ||
-    status === "completed"
+    status === "ready_to_complete"
   ) {
     return status;
   }

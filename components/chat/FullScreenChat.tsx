@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, ChevronDown, Download, Loader2, Paperclip, SendHorizontal, Sparkles } from "lucide-react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
-import { ChatCompletionPanel, type FeedbackPayload } from "./ChatCompletionPanel";
 import { FileUpload } from "./FileUpload";
 import { FlowDetectorPanel, type FlowDetectorState } from "./FlowDetectorPanel";
 import { ProgressPanel } from "./ProgressPanel";
@@ -39,17 +38,10 @@ type SessionChatResponse = {
     completionScore: number;
     missingFields: string[];
     status: string;
-    completed?: boolean;
   };
   statusLabel: string;
   appText: AppTextLabels;
   collectedFields: string[];
-  feedback?: {
-    rating: number;
-    tags: string[];
-    comment: string;
-    submittedAt: string;
-  } | null;
   flowDetector?: FlowDetectorState;
   messages: Array<{
     id: string;
@@ -66,7 +58,6 @@ type SendMessageResponse = {
   collectedFields: string[];
   status: string;
   statusLabel: string;
-  completed?: boolean;
   flowDetector?: FlowDetectorState;
 };
 
@@ -174,8 +165,6 @@ export function FullScreenChat() {
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [collectedFields, setCollectedFields] = useState<string[]>([]);
   const [statusLabel, setStatusLabel] = useState("");
-  const [isCompleted, setIsCompleted] = useState(false);
-  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [flowDetector, setFlowDetector] = useState<FlowDetectorState | null>(null);
   const [isFlowOpen, setIsFlowOpen] = useState(false);
   const [appText, setAppText] = useState<AppTextLabels>(emptyAppText);
@@ -223,8 +212,6 @@ export function FullScreenChat() {
             setMissingFields(restored.session.missingFields);
             setCollectedFields(restored.collectedFields);
             setStatusLabel(restored.statusLabel);
-            setIsCompleted(restored.session.completed === true || restored.session.status === "completed");
-            setFeedbackSubmitted(Boolean(restored.feedback));
             setFlowDetector(restored.flowDetector ?? null);
             setAppText(restored.appText);
             setMessages(
@@ -272,8 +259,6 @@ export function FullScreenChat() {
         setCompletionScore(data.session.completionScore);
         setMissingFields(data.session.missingFields);
         setStatusLabel(data.statusLabel);
-        setIsCompleted(false);
-        setFeedbackSubmitted(false);
         setFlowDetector(data.flowDetector ?? null);
         setAppText(data.appText);
         setMessages(
@@ -318,7 +303,7 @@ export function FullScreenChat() {
   }, [messages, isSending]);
 
   async function handleSend(message: string) {
-    if (!sessionId || isSending || isCompleted) {
+    if (!sessionId || isSending) {
       return;
     }
 
@@ -362,7 +347,6 @@ export function FullScreenChat() {
       setMissingFields(data.missingFields);
       setCollectedFields(data.collectedFields);
       setStatusLabel(data.statusLabel);
-      setIsCompleted(data.completed === true || data.status === "completed");
       setFlowDetector(data.flowDetector ?? flowDetector);
     } catch {
       setError(appText.sendError);
@@ -428,7 +412,8 @@ export function FullScreenChat() {
     }
   }
 
-  async function startFreshChat() {
+  async function handleClearChat() {
+    if (confirm("Are you sure you want to clear this chat and start a new session?")) {
       window.localStorage.removeItem(sessionStorageKey);
       setIsStarting(true);
       setError(null);
@@ -438,9 +423,7 @@ export function FullScreenChat() {
       setCollectedFields([]);
       setStatusLabel("");
       setFlowDetector(null);
-      setIsCompleted(false);
-      setFeedbackSubmitted(false);
-
+      
       try {
         const response = await fetch("/api/chat/start", {
           method: "POST"
@@ -480,29 +463,6 @@ export function FullScreenChat() {
       } finally {
         setIsStarting(false);
       }
-  }
-
-  async function handleClearChat() {
-    if (confirm("Are you sure you want to clear this chat and start a new session?")) {
-      await startFreshChat();
-    }
-  }
-
-  async function handleFeedbackSubmit(feedback: FeedbackPayload) {
-    if (!sessionId || !isCompleted) return false;
-
-    try {
-      const response = await fetch("/api/chat/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, ...feedback })
-      });
-
-      if (!response.ok) return false;
-      setFeedbackSubmitted(true);
-      return true;
-    } catch {
-      return false;
     }
   }
 
@@ -545,7 +505,7 @@ export function FullScreenChat() {
           </div>
         </div>
         <div className={styles.headerActions}>
-          <button
+          <button 
             onClick={handleDownloadChat}
             className={styles.clearButton}
             aria-label="Download conversation history"
@@ -571,7 +531,7 @@ export function FullScreenChat() {
               </div>
             ) : null}
           </div>
-          <button
+          <button 
             onClick={handleClearChat}
             className={styles.clearButton}
           >
@@ -616,31 +576,23 @@ export function FullScreenChat() {
             {error ? <div className={styles.errorState}>{error}</div> : null}
           </div>
 
-          {isCompleted ? (
-            <ChatCompletionPanel
-              submitted={feedbackSubmitted}
-              onSubmit={handleFeedbackSubmit}
-              onStartNewChat={startFreshChat}
+          <div className={styles.composerWrap}>
+            <FileUpload
+              icon={<Paperclip aria-hidden="true" />}
+              label={appText.uploadLabel}
+              ariaLabel={appText.uploadAriaLabel}
+              disabled={!sessionId || isStarting || isUploading}
+              onUpload={handleUpload}
             />
-          ) : (
-            <div className={styles.composerWrap}>
-              <FileUpload
-                icon={<Paperclip aria-hidden="true" />}
-                label={appText.uploadLabel}
-                ariaLabel={appText.uploadAriaLabel}
-                disabled={!sessionId || isStarting || isUploading}
-                onUpload={handleUpload}
-              />
-              <ChatInput
-                placeholder={appText.inputPlaceholder}
-                inputAriaLabel={appText.inputAriaLabel}
-                sendAriaLabel={appText.sendAriaLabel}
-                sendIcon={<SendHorizontal aria-hidden="true" />}
-                disabled={!sessionId || isStarting || isSending || isUploading}
-                onSend={handleSend}
-              />
-            </div>
-          )}
+            <ChatInput
+              placeholder={appText.inputPlaceholder}
+              inputAriaLabel={appText.inputAriaLabel}
+              sendAriaLabel={appText.sendAriaLabel}
+              sendIcon={<SendHorizontal aria-hidden="true" />}
+              disabled={!sessionId || isStarting || isSending || isUploading}
+              onSend={handleSend}
+            />
+          </div>
         </div>
 
         <aside className={styles.sidePanel} aria-label={appText.progressAriaLabel}>

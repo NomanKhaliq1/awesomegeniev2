@@ -1,15 +1,5 @@
 import type { DocumentSourceRow } from "@/lib/data/fileRepository";
 import type { RequirementMemory } from "@/lib/data/requirementsRepository";
-import {
-  filterRejectedList,
-  extractRejectedFacts,
-  getRejectedFacts,
-  textContainsRejectedFact
-} from "@/lib/onboarding/conversationControl";
-import {
-  applySectionReplacements,
-  parseStoredSectionReplacements
-} from "@/lib/brief/sectionRevision";
 
 type ComposeProjectBriefResponseInput = {
   userMessage: string;
@@ -19,19 +9,15 @@ type ComposeProjectBriefResponseInput = {
   documentSources?: DocumentSourceRow[];
 };
 
-export type BriefFacts = {
+type BriefFacts = {
   company: string | null;
   contact: string | null;
-  role: string | null;
   email: string | null;
   timeline: string | null;
   systems: string[];
   goals: string[];
   workflowProblems: string[];
-  workflowDetails: string;
-  priorities: string[];
-  constraints: string[];
-  laterPhases: string[];
+  documentFindings: string;
 };
 
 const UNKNOWN = "Not confirmed yet";
@@ -43,26 +29,32 @@ export function composeProjectBriefResponse({
   recentConversation = "",
   documentSources = []
 }: ComposeProjectBriefResponseInput) {
-  collectedMemory = withMessageRejections(collectedMemory, userMessage);
-  const clientConversation = extractClientMessages(recentConversation);
-  const currentFacts = [
-    clientConversation,
+  const documentText = documentSources
+    .map((source) => source.extracted_text)
+    .filter(Boolean)
+    .join("\n\n");
+  const fullContext = [
+    conversationSummary,
+    recentConversation,
+    documentText,
     userMessage,
-    memoryFactText(collectedMemory)
-  ].filter(Boolean).join("\n");
-  const facts = extractBriefFacts(collectedMemory, currentFacts, currentFacts);
-  const hasUploadedDocs = documentSources.length > 0;
-  const openItems = buildOpenItems(facts);
+    memoryText(collectedMemory)
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const facts = extractBriefFacts(collectedMemory, fullContext, documentText || recentConversation);
+  const genericMode = shouldKeepBriefGeneric(fullContext);
+  const openItems = inferOpenItems(facts, collectedMemory);
+  const hasUploadedDocs = documentSources.length > 0 || (recentConversation.toLowerCase().includes("workflow document") && (recentConversation.toLowerCase().includes("pasted") || recentConversation.toLowerCase().includes("uploaded")));
 
-  const brief = [
+  return [
     "Official Project Brief for Our Sales and Implementation Teams",
     "",
     "Contact and Company Details",
     "",
     `* Company: ${facts.company ?? UNKNOWN}`,
-    `* Contact name: ${facts.contact ?? UNKNOWN}`,
-    `* Contact role: ${facts.role ?? UNKNOWN}`,
-    `* Email: ${facts.email ? `[${facts.email}](mailto:${facts.email})` : UNKNOWN}`,
+    `* Contact: ${facts.contact ?? UNKNOWN}`,
+    `* Email: ${facts.email ? formatEmail(facts.email) : UNKNOWN}`,
     "",
     "Timeline",
     "",
@@ -70,11 +62,11 @@ export function composeProjectBriefResponse({
     "",
     "Systems Involved",
     "",
-    ...(facts.systems.length ? facts.systems : ["Systems to confirm during discovery"]).map((item) => `* ${item}`),
+    ...(genericMode ? getGenericSystems() : facts.systems).map((system) => `* ${system}`),
     "",
     "Project Overview",
     "",
-    buildProjectOverview(facts, collectedMemory),
+    buildProjectOverview(facts),
     "",
     "Current Workflow Problem",
     "",
@@ -82,351 +74,364 @@ export function composeProjectBriefResponse({
     "",
     hasUploadedDocs ? "Workflow Findings from Document" : "Workflow Details Shared",
     "",
-    facts.workflowDetails,
+    hasUploadedDocs
+      ? buildDocumentFindings(documentText || recentConversation)
+      : `Based on the workflow details you described: ${facts.workflowProblems.join(", ")}.`,
     "",
     "Business Goals",
     "",
-    ...facts.goals.map((item) => `* ${item}`),
+    ...facts.goals.map((goal) => `* ${goal}`),
     "",
     "Recommended First Phase",
     "",
-    ...buildFirstPhase(facts).map((item) => `* ${item}`),
+    ...buildRecommendedFirstPhase(genericMode),
     "",
     "Possible Later Phases",
     "",
-    ...(facts.laterPhases.length ? facts.laterPhases : ["No later-phase scope has been confirmed yet."]).map((item) => `* ${item}`),
+    ...buildLaterPhases(genericMode),
     "",
     "Information to Confirm During Discovery",
     "",
-    ...openItems.map((item) => `* ${item}`),
+    ...(genericMode ? inferGenericOpenItems(facts, collectedMemory) : openItems).map((item) => `* ${item}`),
     "",
     "Recommended Next Step",
     "",
-    "Schedule a workflow scoping session with our sales and implementation teams to validate the first-phase scope and prepare a solution plan."
+    "Schedule a workflow scoping session with our sales and implementation teams. We’ll review the project brief and workflow details before the scoping session to validate the first-phase scope and prepare a solution plan."
   ].join("\n");
-
-  return applySectionReplacements(
-    brief,
-    parseStoredSectionReplacements(collectedMemory.brief_section_overrides)
-  );
-}
-
-export function composeProjectBriefRevisionSections({
-  userMessage,
-  collectedMemory,
-  recentConversation = ""
-}: Omit<ComposeProjectBriefResponseInput, "conversationSummary" | "documentSources">) {
-  collectedMemory = withMessageRejections(collectedMemory, userMessage);
-  const context = [extractClientMessages(recentConversation), memoryFactText(collectedMemory)]
-    .filter(Boolean)
-    .join("\n");
-  const facts = extractBriefFacts(collectedMemory, context, context);
-  const requested = getRequestedSections(userMessage);
-  const sections: string[] = [];
-
-  const add = (title: string, lines: string[]) => {
-    sections.push(title, "", ...lines, "");
-  };
-
-  if (requested.has("contact")) {
-    add("Contact and Company Details", [
-      `* Company: ${facts.company ?? UNKNOWN}`,
-      `* Contact name: ${facts.contact ?? UNKNOWN}`,
-      `* Contact role: ${facts.role ?? UNKNOWN}`,
-      `* Email: ${facts.email ?? UNKNOWN}`
-    ]);
-  }
-  if (requested.has("timeline")) add("Timeline", [facts.timeline ?? UNKNOWN]);
-  if (requested.has("systems")) add("Systems Involved", facts.systems.map((item) => `* ${item}`));
-  if (requested.has("overview")) add("Project Overview", [buildProjectOverview(facts, collectedMemory)]);
-  if (requested.has("workflow_problem")) add("Current Workflow Problem", facts.workflowProblems.map((item) => `* ${item}`));
-  if (requested.has("workflow_details")) add("Workflow Details Shared", [facts.workflowDetails]);
-  if (requested.has("goals")) add("Business Goals", facts.goals.map((item) => `* ${item}`));
-  if (requested.has("first_phase")) add("Recommended First Phase", buildFirstPhase(facts).map((item) => `* ${item}`));
-  if (requested.has("later_phases")) {
-    add("Possible Later Phases", (facts.laterPhases.length ? facts.laterPhases : ["No later-phase scope has been confirmed yet."]).map((item) => `* ${item}`));
-  }
-  if (requested.has("open_items")) add("Information to Confirm During Discovery", buildOpenItems(facts).map((item) => `* ${item}`));
-
-  if (!sections.length) {
-    add("Updated Project Brief Sections", [
-      "The requested removals and product-neutral wording have been applied to the project brief."
-    ]);
-  }
-
-  return sections.join("\n").trim();
 }
 
 export function extractBriefFacts(
   memory: RequirementMemory,
   fullContext: string,
-  _workflowSourceText: string
+  workflowSourceText: string
 ): BriefFacts {
-  const safeContext = removeRejectedSentences(fullContext, memory);
-  const company = text(memory.company_name) ?? extractCompany(safeContext);
-  const contact = text(memory.contact_name) ?? extractContact(safeContext);
-  const role = text(memory.contact_role) ?? extractRole(safeContext);
-  const email = text(memory.email) ?? safeContext.match(/\b[\w.%+-]+@[\w.-]+\.[a-z]{2,}\b/i)?.[0] ?? null;
-  const timeline = text(memory.timeline) ?? extractTimeline(safeContext);
-  const systems = collectSystems(memory, safeContext);
-  const workflowProblems = collectWorkflowProblems(memory, safeContext);
-  const workflowDetails = buildWorkflowDetails(workflowProblems);
-  const priorities = collectPriorities(memory, safeContext);
-  const constraints = collectConstraints(memory, safeContext);
-  const goals = collectGoals(safeContext, priorities);
-  const laterPhases = collectLaterPhases(safeContext, memory);
+  const company = firstString(memory.company_name) ?? extractCompany(fullContext);
+  const contact = firstString(memory.contact_name) ?? extractContact(fullContext);
+  const email = firstString(memory.email) ?? fullContext.match(/\b[\w.%+-]+@[\w.-]+\.[a-z]{2,}\b/i)?.[0] ?? null;
+  const timeline = firstString(memory.timeline) ?? extractTimeline(fullContext);
+  const systems = collectSystems(memory, fullContext);
+  const goals = collectGoals(memory, fullContext);
+  const workflowProblems = collectWorkflowProblems(fullContext);
+  const documentFindings = buildDocumentFindings(workflowSourceText || fullContext);
 
   return {
     company,
     contact,
-    role,
     email,
     timeline,
     systems,
     goals,
     workflowProblems,
-    workflowDetails,
-    priorities,
-    constraints,
-    laterPhases
+    documentFindings
   };
 }
 
-function extractClientMessages(conversation: string) {
-  return conversation
-    .split(/\n(?=(?:user|assistant):)/i)
-    .filter((line) => /^user:/i.test(line.trim()))
-    .map((line) => line.replace(/^user:\s*/i, "").trim())
+function memoryText(memory: RequirementMemory) {
+  return Object.entries(memory)
+    .filter(([, value]) => hasValue(value))
+    .map(([key, value]) => `${key}: ${String(value)}`)
     .join("\n");
 }
 
-function withMessageRejections(memory: RequirementMemory, message: string): RequirementMemory {
-  const rejected = Array.from(new Set([
-    ...getRejectedFacts(memory),
-    ...extractRejectedFacts(message)
-  ]));
-  return rejected.length ? { ...memory, rejected_facts: rejected.join("|") } : memory;
-}
-
-function getRequestedSections(message: string) {
-  const requested = new Set<string>();
-  const sectionPatterns: Array<[string, RegExp]> = [
-    ["contact", /contact and company|contact details?|company details?/i],
-    ["timeline", /\btimeline\b/i],
-    ["systems", /systems involved|systems section/i],
-    ["overview", /project overview/i],
-    ["workflow_problem", /current workflow problem/i],
-    ["workflow_details", /workflow details(?: shared)?/i],
-    ["goals", /business goals?/i],
-    ["first_phase", /recommended first phase|first phase/i],
-    ["later_phases", /possible later phases|later phases|moved to later/i],
-    ["open_items", /information to confirm|open items/i]
-  ];
-  for (const [name, pattern] of sectionPatterns) {
-    if (pattern.test(message)) requested.add(name);
+function firstString(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
   }
-  return requested;
+
+  const trimmed = value.trim();
+  return trimmed && trimmed !== "null" && trimmed !== "undefined" ? trimmed : null;
 }
 
-function memoryFactText(memory: RequirementMemory) {
-  const factKeys = [
-    "business_problem", "current_process", "teams_involved", "primary_bottleneck",
-    "desired_outcome", "existing_systems", "constraints", "priority", "required_features",
-    "company_name", "contact_name", "contact_role", "email", "timeline"
+function hasValue(value: unknown) {
+  return typeof value === "string" ? firstString(value) !== null : value !== null && value !== undefined;
+}
+
+function formatEmail(email: string) {
+  return `[${email}](mailto:${email})`;
+}
+
+function extractCompany(text: string) {
+  const patterns = [
+    /\bCompany:\s*([^\n]+)/i,
+    /\bat\s+([A-Z][A-Za-z0-9 &.'-]{2,80}?)(?:\.|,|\n|$)/,
+    /\bcompany\s+(?:is|name is)\s+([A-Z][A-Za-z0-9 &.'-]{2,80}?)(?:\.|,|\n|$)/i
   ];
-  return factKeys
-    .map((key) => memory[key])
-    .filter((value) => value !== null && value !== undefined)
-    .map(String)
-    .join("\n");
+
+  return cleanExtracted(patterns.map((pattern) => text.match(pattern)?.[1]).find(Boolean));
 }
 
-function removeRejectedSentences(value: string, memory: RequirementMemory) {
+function extractContact(text: string) {
+  const patterns = [
+    /\bContact:\s*([^\n]+)/i,
+    /\bmain contact will be\s+([^\n.]+)/i,
+    /\bmain contact (?:would be|is)\s+([^,\n.]+)(?:,\s*([^.\n]+?)(?=\s+at\s+[A-Z]|[.\n]|$))?/i,
+    /\bContact\s+and\s+Company\s+Details[\s\S]*?\*\s*Contact:\s*([^\n]+)/i
+  ];
+
+  const match = patterns.map((pattern) => text.match(pattern)).find(Boolean);
+  if (!match) return null;
+  const name = cleanExtracted(match[1]);
+  const role = cleanExtracted(match[2]);
+  return [name, role].filter(Boolean).join(", ") || null;
+}
+
+function extractTimeline(text: string) {
+  const patterns = [
+    /\bTimeline:\s*([^\n]+)/i,
+    /\b(?:start\s+)?discovery\s+within\s+(?:the\s+)?next\s+(\d+\s+weeks?|two\s+weeks?|three\s+weeks?|four\s+weeks?)\b/i,
+    /\bdiscovery\s+within\s+(?:the\s+)?next\s+(\d+\s+weeks?)/i,
+    /\bwithin\s+(?:the\s+)?next\s+(\d+\s+weeks?)/i
+  ];
+  const match = patterns.map((pattern) => text.match(pattern)).find(Boolean);
+
+  if (!match) {
+    return null;
+  }
+
+  if (match[0].toLowerCase().includes("discovery")) {
+    return cleanExtracted(match[0]);
+  }
+
+  const value = cleanExtracted(match[1]);
+  if (match[0].toLowerCase().includes("discovery") && value && !value.toLowerCase().includes("discovery")) {
+    return `Start discovery within the next ${value}`;
+  }
+
+  return value;
+}
+
+function cleanExtracted(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
   return value
-    .split(/(?<=[.!?])\s+|\n/)
-    .filter((sentence) => !textContainsRejectedFact(sentence, memory))
-    .join("\n");
+    .replace(/\[([^\]]+)\]\(mailto:[^)]+\)/gi, "$1")
+    .replace(/^[-*: ]+/, "")
+    .replace(/[.。]$/, "")
+    .trim() || null;
 }
 
-function collectSystems(memory: RequirementMemory, context: string) {
-  const explicit = filterRejectedList(memory.existing_systems, memory);
-  const source = `${explicit ?? ""}\n${context}`;
-  const candidates: Array<[string, RegExp]> = [
+function collectSystems(memory: RequirementMemory, text: string) {
+  if (shouldKeepBriefGeneric(text)) {
+    return getGenericSystems();
+  }
+
+  const base: Array<[string, RegExp]> = [
     ["Encompass", /\bencompass\b/i],
     ["HubSpot", /\bhubspot\b/i],
-    ["Salesforce", /\bsalesforce\b/i],
-    ["Loan system", /\bloan system\b/i],
-    ["CRM", /\bcrm\b/i],
-    ["Borrower email/SMS tools", /\bborrower (?:email\/sms|email and sms)|\bemail\/sms tools\b/i]
+    ["Title vendor system", /\btitle\b/i],
+    ["Appraisal vendor system", /\bappraisal\b/i],
+    ["Borrower email/SMS communication tools", /\bborrower\b|\bemail\/sms\b|\bsms\b/i]
   ];
-  const systems = candidates
-    .filter(([label, pattern]) => pattern.test(source) && !isRejectedLabel(label, memory))
-    .map(([label]) => label);
+  const memorySystems = [memory.existing_systems, memory.integration_requirements, memory.existing_tools]
+    .map(firstString)
+    .filter(Boolean)
+    .join("; ");
+  const combined = `${text}\n${memorySystems}`;
+  const systems = base.filter(([, pattern]) => pattern.test(combined)).map(([label]) => label);
 
-  if (systems.includes("Encompass")) remove(systems, "Loan system");
-  if (systems.includes("HubSpot") || systems.includes("Salesforce")) remove(systems, "CRM");
-  return Array.from(new Set(systems));
+  return systems.length > 0 ? systems : ["Systems to confirm during discovery"];
 }
 
-function collectWorkflowProblems(memory: RequirementMemory, context: string) {
-  const source = `${text(memory.current_process) ?? ""}\n${context}`;
-  const problems: string[] = [];
-  const usesNamedLoanSystem = /\bencompass\b/i.test(source) && !isRejectedLabel("Encompass", memory);
-  const usesNamedCrm = /\bhubspot\b/i.test(source) && !isRejectedLabel("HubSpot", memory);
-  const loanSystem = usesNamedLoanSystem ? "Encompass" : "the loan system";
-  const crm = usesNamedCrm ? "HubSpot" : "the CRM";
+function collectGoals(memory: RequirementMemory, text: string) {
+  const explicitGoals = firstString(memory.goals);
+  const combined = `${text}\n${explicitGoals ?? ""}`;
+  const genericMode = shouldKeepBriefGeneric(combined);
+  const goals = ([
+    [genericMode ? "Reduce duplicate status updates between the loan system and CRM." : "Reduce duplicate data entry between Encompass and HubSpot.", /reduce duplicate|duplicate data entry|duplicate entry|duplicate updates/i],
+    ["Improve visibility for processing, underwriting, and closing teams.", /visibility|processing|underwriting|closing/i],
+    ["Automate borrower status notifications.", /borrower.*notification|status notification|email\/sms/i],
+    ["Reduce manual follow-ups with title and appraisal vendors.", /vendor follow-up|title.*appraisal|manual follow/i],
+    ["Avoid adding more operations staff as loan volume grows.", /avoid adding|operations staff|volume grows/i]
+  ] as Array<[string, RegExp]>)
+    .filter(([, pattern]) => pattern.test(combined))
+    .map(([goal]) => goal);
 
-  if (/loan status/i.test(source) && /manual|multiple places|duplicate/i.test(source)) {
-    problems.push(`Loan status is updated in ${loanSystem} and then manually repeated in ${crm}.`);
-  }
-  if (/borrower/i.test(source) && /email|sms|updates?/i.test(source) && /manual/i.test(source)) {
-    problems.push("Borrower email/SMS updates are sent manually after status changes.");
-  }
-  if (/manual handoffs?|rely on .*handoffs?/i.test(source)) {
-    const teams = collectConfirmedTeams(memory, source);
-    problems.push(teams.length
-      ? `${humanList(teams)} rely on manual handoffs to remain informed.`
-      : "Teams rely on manual handoffs to remain informed.");
-  }
-  if (/delays?|duplicate work|visibility gaps?/i.test(source)) {
-    problems.push("The current process creates delays, duplicate work, and visibility gaps.");
-  }
-
-  return problems.length ? problems : [text(memory.current_process) ?? "Current workflow details will be validated during discovery."];
+  return goals.length > 0 ? goals : ["Confirm business goals during discovery."];
 }
 
-function collectConfirmedTeams(memory: RequirementMemory, context: string) {
-  const source = `${text(memory.teams_involved) ?? ""}\n${context}`;
-  return ["sales", "processing", "underwriting", "closing", "operations"]
-    .filter((team) => new RegExp(`\\b${team}\\b`, "i").test(source));
+function collectWorkflowProblems(text: string) {
+  if (shouldKeepBriefGeneric(text)) {
+    const problems = ([
+      ["Loan status is updated in the loan system and then manually repeated in the CRM.", /loan status|crm|loan system|manual/i],
+      ["Borrower email/SMS updates are sent manually.", /borrower.*manual|manual email|manual sms|email\/sms/i],
+      ["Teams rely on manual handoffs to stay aligned.", /handoff|handoffs/i],
+      ["Vendor follow-up processes for title and appraisal may need later-phase review.", /title|appraisal|vendor/i]
+    ] as Array<[string, RegExp]>)
+      .filter(([, pattern]) => pattern.test(text))
+      .map(([problem]) => problem);
+
+    return problems.length > 0
+      ? problems
+      : ["Current workflow details should be confirmed during discovery."];
+  }
+
+  const problems = ([
+    ["Processor updates loan status in Encompass.", /processor.*loan status.*encompass|loan status.*encompass/i],
+    ["The same status is manually updated in HubSpot.", /same status.*hubspot|manually updated in hubspot|hubspot update/i],
+    ["Borrower email/SMS updates are sent manually.", /borrower.*manual|manual email|manual sms|email\/sms/i],
+    ["Title vendor is contacted manually when loan status changes.", /title vendor.*manual|title.*status changes/i],
+    ["Appraisal vendor follow-up is tracked separately.", /appraisal.*tracked separately|appraisal vendor/i],
+    ["Processing, underwriting, and closing teams do not have one shared loan-status view.", /processing.*underwriting.*closing|shared status view|shared loan-status view/i]
+  ] as Array<[string, RegExp]>)
+    .filter(([, pattern]) => pattern.test(text))
+    .map(([problem]) => problem);
+
+  return problems.length > 0
+    ? problems
+    : ["Current workflow details should be confirmed during discovery."];
 }
 
-function collectPriorities(memory: RequirementMemory, context: string) {
-  const source = `${text(memory.priority) ?? ""}\n${text(memory.desired_outcome) ?? ""}\n${text(memory.goals) ?? ""}\n${text(memory.required_features) ?? ""}\n${context}`;
-  const priorities: string[] = [];
-  if (/crm status synchroni[sz]ation|keeping .*crm .*sync|keep .*crm .*aligned|hubspot .*sync/i.test(source)) {
-    priorities.push("CRM status synchronization from the loan system");
+function buildDocumentFindings(text: string) {
+  const findings = [
+    /same status.*hubspot|duplicated fields|duplicate manual/i.test(text)
+      ? "the same loan status information is manually repeated across multiple systems"
+      : null,
+    /borrower.*notification|email\/sms|manual email|manual sms/i.test(text)
+      ? "borrower notification triggers"
+      : null,
+    /title|appraisal|vendor/i.test(text)
+      ? "vendor follow-up coordination"
+      : null,
+    /processing.*underwriting.*closing|shared status view|shared loan-status view/i.test(text)
+      ? "shared visibility across internal teams"
+      : null
+  ].filter(Boolean) as string[];
+
+  if (findings.length === 0) {
+    return "The workflow document should be reviewed during discovery to confirm workflow steps, system update points, notification triggers, duplicated fields, and manual handoffs.";
   }
-  if (/borrower .*automation|automat(?:e|ing) borrower|borrower email\/sms update automation/i.test(source)) {
-    priorities.push("Borrower email/SMS update automation");
-  }
-  return priorities;
+
+  return `The workflow document shows that ${findings[0]}. The strongest operational gaps are ${humanList(findings.slice(1).length > 0 ? findings.slice(1) : findings)}.`;
 }
 
-function collectConstraints(memory: RequirementMemory, context: string) {
-  const source = `${text(memory.constraints) ?? ""}\n${context}`;
-  const constraints: string[] = [];
-  if (/security/i.test(source)) constraints.push("security");
-  if (/compliance/i.test(source)) constraints.push("compliance");
-  if (/access control/i.test(source)) constraints.push("access control");
-  if (/audit visibility/i.test(source)) constraints.push("audit visibility");
-  if (/avoid(?:ing)? disruption|without disrupt/i.test(source)) constraints.push("avoiding disruption to the existing workflow");
-  return constraints;
+function buildProjectOverview(facts: BriefFacts) {
+  const company = facts.company ?? "The client";
+  const systems = facts.systems.filter((system) => system !== "Systems to confirm during discovery");
+  const systemText = systems.length > 0 ? ` across ${humanList(systems)}` : "";
+
+  return `${company} is looking to reduce duplicate manual work${systemText}. The confirmed first priority is CRM status synchronization from the loan system, followed by borrower email/SMS update automation. Vendor follow-ups for title and appraisal should remain a possible later phase unless discovery confirms they should be included earlier.`;
 }
 
-function collectGoals(context: string, priorities: string[]) {
-  const goals: string[] = [];
-  if (/duplicate|multiple places|crm status synchroni[sz]ation/i.test(context)) {
-    goals.push("Reduce duplicate status updates between the loan system and CRM.");
-  }
-  if (/visibility|manual handoffs?/i.test(context)) {
-    goals.push("Improve status visibility across the teams involved in the workflow.");
-  }
-  if (/borrower/i.test(context) && /manual|automation|email|sms/i.test(context)) {
-    goals.push("Reduce manual borrower email/SMS updates.");
-  }
-  if (/current|accurate|reliab|consistent|status information/i.test(context)) {
-    goals.push("Improve the reliability and consistency of status information.");
-  }
-  if (!goals.length && priorities.length) {
-    goals.push(...priorities.map((priority) => `Improve ${priority.toLowerCase()}.`));
-  }
-  return goals.length ? Array.from(new Set(goals)) : ["Confirm the desired business outcomes during discovery."];
+function shouldKeepBriefGeneric(text: string) {
+  return /\b(keep (?:the )?(?:wording|system names) generic|specific systems .* not confirmed|not confirmed .* specific systems|have not confirmed .*(?:encompass|hubspot|plugin)|avoid assuming specific products|avoid assuming .*plugins|avoid assuming .*real-time|do not assume .*real-time|loan system, crm|our loan system, crm)\b/i.test(
+    text
+  );
 }
 
-function collectLaterPhases(context: string, memory: RequirementMemory) {
-  const later: string[] = [];
-  if (/internal visibility .*during discovery|review internal visibility .*discovery/i.test(context) && !isRejectedLabel("dashboard", memory)) {
-    later.push("Additional internal visibility requirements, if confirmed during discovery.");
-  }
-  return later;
-}
-
-function buildWorkflowDetails(problems: string[]) {
-  const processSteps = problems.filter((item) => !/creates delays|will be validated/i.test(item));
-  return processSteps.join(" ");
-}
-
-function buildProjectOverview(facts: BriefFacts, memory: RequirementMemory) {
-  const problem = text(memory.business_problem) ?? text(memory.project_overview) ?? facts.workflowProblems.join(" ");
-  const priorityText = facts.priorities.length
-    ? ` The confirmed priorities are ${humanList(facts.priorities)}.`
-    : "";
-  const constraintText = facts.constraints.length
-    ? ` Discovery should treat ${humanList(facts.constraints)} as requirements.`
-    : "";
-  return `${problem}${priorityText}${constraintText}`.trim();
-}
-
-function buildFirstPhase(facts: BriefFacts) {
-  if (!facts.priorities.length) {
-    return ["Validate the first-phase priority during the workflow scoping session."];
-  }
+function getGenericSystems() {
   return [
-    ...facts.priorities.map((priority, index) => `${index + 1}. ${priority}.`),
-    "Discovery will determine whether real-time, scheduled, or event-based synchronization is the best fit."
+    "Loan system",
+    "CRM",
+    "Borrower email/SMS tools",
+    "Manual vendor follow-up processes"
   ];
 }
 
-function buildOpenItems(facts: BriefFacts) {
-  const items = [
-    "Exact status fields, milestones, and update points.",
-    "Borrower notification rules and triggers.",
-    "Synchronization cadence and source-of-truth rules.",
-    "Workflow ownership, security, access, and rollout requirements."
+function buildRecommendedFirstPhase(genericMode: boolean) {
+  if (genericMode) {
+    return [
+      "* CRM status synchronization from the loan system as the first priority.",
+      "* Borrower email/SMS update automation as the second priority.",
+      "* Confirm during discovery whether synchronization should be real-time, scheduled, or event-based."
+    ];
+  }
+
+  return [
+    "* Map Encompass loan status fields to HubSpot update points.",
+    "* Define source-of-truth rules for loan status updates.",
+    "* Identify borrower notification triggers.",
+    "* Define shared visibility requirements for processing, underwriting, and closing teams.",
+    "* Confirm whether automation should be scheduled, event-driven, or real-time depending on system capabilities."
   ];
-  if (!facts.company) items.push("Company name.");
-  if (!facts.contact) items.push("Primary contact name and role.");
-  if (!facts.email) items.push("Primary contact email address.");
-  if (!facts.timeline) items.push("Target discovery timeline.");
-  return items;
 }
 
-function extractCompany(value: string) {
-  return value.match(/\bat\s+([A-Z][A-Za-z0-9 &.'-]{2,80}?)(?:\.|,|\n|$)/)?.[1]?.trim() ?? null;
+function buildLaterPhases(genericMode: boolean) {
+  if (genericMode) {
+    return [
+      "* Title and appraisal vendor follow-up automation.",
+      "* Additional internal visibility workflows if needed after discovery.",
+      "* Broader reporting or dashboard needs if the first phase shows a clear requirement."
+    ];
+  }
+
+  return [
+    "* Borrower notification automation.",
+    "* Vendor coordination automation.",
+    "* Operational visibility dashboard.",
+    "* Custom Encompass plugin for specific workflow actions.",
+    "* Internal operations portal if teams need centralized status visibility beyond CRM/LOS synchronization."
+  ];
 }
 
-function extractContact(value: string) {
-  return value.match(/\bmain contact (?:would be|is|will be)\s+([A-Z][A-Za-z .'-]{1,60}?)(?:,|\s+at\s+|\.|\n|$)/i)?.[1]?.trim() ?? null;
+function inferGenericOpenItems(facts: BriefFacts, memory: RequirementMemory) {
+  const open = [
+    "Exact loan-status fields and milestones involved.",
+    "CRM objects, properties, and update points.",
+    "Borrower communication rules and message triggers.",
+    "Whether synchronization should be real-time, scheduled, or event-based.",
+    "Vendor follow-up steps and whether they belong in a later phase.",
+    "Which team owns each workflow stage.",
+    "Security, compliance, audit visibility, and access requirements.",
+    "Preferred implementation priority and rollout approach."
+  ];
+
+  if (!hasValue(memory.inquiry_volume)) open.push("Approximate loan volume or status-update volume.");
+  if (!hasValue(memory.team_size)) open.push("Number of team members involved in the manual process.");
+  if (!hasValue(memory.budget_range)) open.push("Target budget range for this project.");
+  if (!facts.company) open.push("Company legal name and account ownership details.");
+  if (!facts.contact) open.push("Primary contact name and role.");
+  if (!facts.email) open.push("Primary contact email address.");
+  if (!facts.timeline) open.push("Target discovery and rollout timeline.");
+
+  return open;
 }
 
-function extractRole(value: string) {
-  return value.match(/\bmain contact (?:would be|is|will be)\s+[A-Z][A-Za-z .'-]{1,60}?,\s*([^\n.]+?)(?=\s+at\s+[A-Z]|[.\n]|$)/i)?.[1]?.trim() ?? null;
-}
+function inferOpenItems(facts: BriefFacts, memory: RequirementMemory) {
+  const open = [
+    "Exact Encompass fields and milestones involved.",
+    "HubSpot objects, properties, and update points.",
+    "Borrower communication rules and message triggers.",
+    "Vendor follow-up steps and system access requirements.",
+    "Which team owns each workflow stage.",
+    "Required reporting and visibility views.",
+    "Security, compliance, and access requirements.",
+    "Preferred implementation priority and rollout approach."
+  ];
 
-function extractTimeline(value: string) {
-  const match = value.match(/\b(?:start\s+)?discovery\s+within\s+(?:the\s+)?next\s+(\d+\s+weeks?|two\s+weeks?|three\s+weeks?|four\s+weeks?)\b/i);
-  return match?.[1] ? `Start discovery within the next ${match[1]}` : null;
-}
+  if (!hasValue(memory.inquiry_volume)) {
+    open.push("Approximate loan volume (daily or weekly status-related requests).");
+  }
+  if (!hasValue(memory.team_size)) {
+    open.push("Number of team members/processors involved in the manual process.");
+  }
+  if (!hasValue(memory.budget_range)) {
+    open.push("Target budget range for this project.");
+  }
+  if (!hasValue(memory.traffic_volume)) {
+    open.push("Monthly website traffic volume (if borrower self-service pages are involved).");
+  }
+  if (!hasValue(memory.conversion_metrics)) {
+    open.push("Specific conversion, lead, or operational metrics to improve.");
+  }
 
-function isRejectedLabel(label: string, memory: RequirementMemory) {
-  const rejected = getRejectedFacts(memory).map((item) => item.toLowerCase());
-  return rejected.some((item) => label.toLowerCase().includes(item) || item.includes(label.toLowerCase()));
-}
+  if (!facts.company) open.push("Company legal name and account ownership details.");
+  if (!facts.contact) open.push("Primary contact name and role.");
+  if (!facts.email) open.push("Primary contact email address.");
+  if (!facts.timeline) open.push("Target discovery and rollout timeline.");
 
-function text(value: unknown) {
-  if (typeof value !== "string") return null;
-  const clean = value.trim();
-  return clean && clean !== "null" && clean !== "undefined" ? clean : null;
-}
-
-function remove(items: string[], value: string) {
-  const index = items.indexOf(value);
-  if (index >= 0) items.splice(index, 1);
+  return open;
 }
 
 function humanList(items: string[]) {
-  if (items.length < 2) return items[0] ?? "";
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
+  if (items.length <= 1) {
+    return items[0] ?? "";
+  }
+
+  if (items.length === 2) {
+    return `${items[0]} and ${items[1]}`;
+  }
+
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }

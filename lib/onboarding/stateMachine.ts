@@ -5,8 +5,7 @@ export type OnboardingState =
   | "collecting_core"
   | "collecting_service_details"
   | "ready_for_files"
-  | "ready_to_complete"
-  | "completed";
+  | "ready_to_complete";
 
 export function getOnboardingState({
   completionScore,
@@ -36,5 +35,5 @@ export async function getStateLabel(state: OnboardingState) {
   const labels =
     await getSystemSetting<Record<OnboardingState, string>>("onboarding_state_labels");
 
-  return labels?.[state] ?? (state === "completed" ? "Onboarding complete" : "Exploring needs");
+  return labels[state];
 }

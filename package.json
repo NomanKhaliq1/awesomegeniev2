@@ -19,7 +19,8 @@
     "test:enterprise-onboarding": "tsx scripts/qa/live-qa-enterprise-onboarding-test.ts",
     "qa:chatbot": "tsx scripts/qa/full-chatbot-qa.ts",
     "drive:check": "tsx scripts/maintenance/drive-check.ts",
-    "langsmith:smoke": "tsx scripts/maintenance/langsmith-smoke.ts"
+    "langsmith:smoke": "tsx scripts/maintenance/langsmith-smoke.ts",
+    "test:brief-routing": "tsx scripts/qa/project-brief-routing-smoke.ts"
   },
   "dependencies": {
     "@langchain/core": "^1.1.48",

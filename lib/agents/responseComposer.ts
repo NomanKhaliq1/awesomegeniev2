@@ -1,19 +1,8 @@
 import type { RouteDecision } from "./routerAgent";
 import { isClearlyUnrelated } from "./routerAgent";
 import type { RequirementMemory } from "@/lib/data/requirementsRepository";
-import { getClientRequirement, updateRequirementMemory } from "@/lib/data/requirementsRepository";
-import { getLatestProjectBrief, upsertProjectBrief } from "@/lib/data/projectBriefRepository";
-import {
-  composeProjectBriefResponse,
-  composeProjectBriefRevisionSections
-} from "@/lib/brief/composeProjectBriefResponse";
-import {
-  applySectionReplacements,
-  extractExactSectionReplacements,
-  formatSectionReplacements,
-  mergeStoredSectionReplacements,
-  readBriefSection
-} from "@/lib/brief/sectionRevision";
+import { getClientRequirement } from "@/lib/data/requirementsRepository";
+import { upsertProjectBrief } from "@/lib/data/projectBriefRepository";
 import { getLangChainModel } from "@/lib/langchain/model";
 import { detectMortgageDomain } from "@/lib/onboarding/discovery";
 import {
@@ -99,24 +88,6 @@ export async function composeOnboardingResponse({
   isFirstProjectMessage = false
 }: ComposeResponseInput) {
   const targetLanguage = detectUserLanguage(userMessage);
-
-  if (nextQuestion && /what email address|best email|email address should/i.test(nextQuestion)) {
-    const contact = String(collectedMemory.contact_name || "").trim();
-    const role = String(collectedMemory.contact_role || "").trim();
-    const company = String(collectedMemory.company_name || "").trim();
-    const identity = [contact, role].filter(Boolean).join(", ");
-    if (targetLanguage === "roman_urdu") {
-      return `${identity || "Main contact"}${company ? ` at ${company}` : ""} note kar liya gaya hai. Follow-up ke liye best email address kya hai?`;
-    }
-    return `We've noted ${identity || "the main contact"}${company ? ` at ${company}` : ""}. What is the best email address for follow-up?`;
-  }
-
-  if (/\bsecurity|compliance|access control|audit visibility|avoid(?:ing)? disruption\b/i.test(userMessage) && nextQuestion) {
-    const acknowledgement = targetLanguage === "roman_urdu"
-      ? "Security, compliance, access control, audit visibility, aur existing workflow ko disrupt na karna discovery requirements ke taur par note kar liya gaya hai."
-      : "Understood. We'll treat security, compliance, access control, audit visibility, and avoiding disruption to the existing workflow as discovery requirements.";
-    return `${acknowledgement}\n\n${nextQuestion}`;
-  }
 
   if (routeDecision.intent === "irrelevant") {
     if (targetLanguage === "roman_urdu") {
@@ -1618,97 +1589,6 @@ export async function composeProjectBriefRevisionResponse({
   recentConversation?: string;
   conversationSummary?: string;
 }) {
-  const exactReplacements = extractExactSectionReplacements(userMessage);
-  if (exactReplacements.length > 0) {
-    const exactResponse = formatSectionReplacements(exactReplacements);
-
-    if (sessionId) {
-      try {
-        const [requirement, existingBrief] = await Promise.all([
-          getClientRequirement(sessionId),
-          getLatestProjectBrief(sessionId)
-        ]);
-        const storedBase = existingBrief?.content_markdown || exactResponse;
-        let correctedBrief = applySectionReplacements(storedBase, exactReplacements);
-
-        const patchVerified = exactReplacements.every(
-          ({ section, content }) => readBriefSection(correctedBrief, section) === content
-        );
-        if (!patchVerified) {
-          correctedBrief = applySectionReplacements(storedBase, exactReplacements);
-        }
-
-        const sectionOverrides = mergeStoredSectionReplacements(
-          collectedMemory.brief_section_overrides,
-          exactReplacements
-        );
-        const memoryPatch: RequirementMemory = {
-          brief_section_overrides: sectionOverrides,
-          brief_status: "revision",
-          current_stage: "brief_revision"
-        };
-        for (const replacement of exactReplacements) {
-          if (replacement.section === "Project Overview") {
-            memoryPatch.project_overview = replacement.content;
-            memoryPatch.brief_project_overview = replacement.content;
-          }
-          if (replacement.section === "Workflow Details Shared") {
-            memoryPatch.brief_workflow_details_shared = replacement.content;
-          }
-        }
-
-        await updateRequirementMemory({ sessionId, memory: memoryPatch });
-        await upsertProjectBrief({
-          sessionId,
-          requirementId: requirement?.id ?? null,
-          title: existingBrief?.title || `${String(collectedMemory.company_name || "Client")} - Project Brief`,
-          contentMarkdown: correctedBrief,
-          contentJson: {
-            ...(existingBrief?.content_json || {}),
-            sectionOverrides: JSON.parse(sectionOverrides),
-            structuredMemory: { ...collectedMemory, ...memoryPatch }
-          }
-        });
-      } catch (error) {
-        console.error("Failed to persist exact project brief section replacement:", error);
-      }
-    }
-
-    return exactResponse;
-  }
-
-  const revisedSections = composeProjectBriefRevisionSections({
-    userMessage,
-    collectedMemory,
-    recentConversation
-  });
-
-  if (sessionId) {
-    try {
-      const requirement = await getClientRequirement(sessionId);
-      const fullUpdatedBrief = composeProjectBriefResponse({
-        userMessage,
-        collectedMemory,
-        conversationSummary,
-        recentConversation
-      });
-      await upsertProjectBrief({
-        sessionId,
-        requirementId: requirement?.id ?? null,
-        title: `${String(collectedMemory.company_name || "Client")} - Project Brief`,
-        contentMarkdown: fullUpdatedBrief,
-        contentJson: { structuredMemory: collectedMemory }
-      });
-    } catch (error) {
-      console.error("Failed to persist project brief revision:", error);
-    }
-  }
-
-  return revisedSections;
-
-  /* Legacy branches below are intentionally unreachable while retained for a
-     short migration window. The deterministic path above prevents model-driven
-     revisions from reintroducing unconfirmed or rejected facts. */
   const targetLanguage = detectUserLanguage(userMessage);
   const wantsGenericBriefRevision =
     /\b(keep (?:the )?(?:wording|system names) generic|specific systems .* not confirmed|have not confirmed .*specific systems|avoid assuming specific products|avoid assuming .*plugins|avoid assuming .*real-time|first priority is crm status synchronization|borrower email\/sms update automation is the second priority)\b/i.test(
@@ -1729,9 +1609,9 @@ export async function composeProjectBriefRevisionResponse({
 
     if (sessionId) {
       try {
-        const requirement = await getClientRequirement(sessionId ?? "");
+        const requirement = await getClientRequirement(sessionId);
         await upsertProjectBrief({
-          sessionId: sessionId ?? "",
+          sessionId,
           requirementId: requirement?.id ?? null,
           title: `${getGenericCompanyName(collectedMemory, recentConversation, userMessage)} - Project Brief`,
           contentMarkdown: fullUpdatedBrief,
@@ -1801,7 +1681,7 @@ export async function composeProjectBriefRevisionResponse({
 
     if (sessionId) {
       try {
-        const requirement = await getClientRequirement(sessionId ?? "");
+        const requirement = await getClientRequirement(sessionId);
         const title = `${company} - Project Brief`;
         const fullUpdatedBrief = [
           "Official Project Brief for Our Sales and Implementation Teams",
@@ -1862,7 +1742,7 @@ export async function composeProjectBriefRevisionResponse({
         ].join("\n");
 
         await upsertProjectBrief({
-          sessionId: sessionId ?? "",
+          sessionId,
           requirementId: requirement?.id ?? null,
           title,
           contentMarkdown: fullUpdatedBrief,
@@ -2029,10 +1909,10 @@ ${recentConversation}
 
   if (sessionId && fullBrief) {
     try {
-      const requirement = await getClientRequirement(sessionId ?? "");
+      const requirement = await getClientRequirement(sessionId);
       const title = `${companyName} - Project Brief`;
       await upsertProjectBrief({
-        sessionId: sessionId ?? "",
+        sessionId,
         requirementId: requirement?.id ?? null,
         title,
         contentMarkdown: fullBrief,

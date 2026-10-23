@@ -121,27 +121,6 @@ export function evaluateConversationState({
 
   const canRecommend = hasSolutionReadiness(completed);
   const canCaptureLead = canRecommend && completed.solution_direction && completed.recommendation;
-  const lifecycleStage = typeof memory.current_stage === "string" ? memory.current_stage : "";
-
-  if (["brief_generated", "brief_revision"].includes(lifecycleStage)) {
-    return {
-      stage: "project_brief",
-      completed: { ...completed, project_brief: true },
-      canRecommend: true,
-      canCaptureLead: true,
-      nextQuestion: null
-    };
-  }
-
-  if (["brief_approved", "scoping_ready", "handoff_complete"].includes(lifecycleStage)) {
-    return {
-      stage: "drive_handoff",
-      completed: { ...completed, project_brief: true, drive_handoff: true },
-      canRecommend: true,
-      canCaptureLead: true,
-      nextQuestion: null
-    };
-  }
 
   if (!completed.problem) {
     return {
@@ -183,13 +162,24 @@ export function evaluateConversationState({
     };
   }
 
+  if (!completed.root_cause_validated) {
+    return {
+      stage: "root_cause_validation",
+      completed,
+      canRecommend,
+      canCaptureLead,
+      nextQuestion:
+        "Based on what you've shared so far, it sounds like teams are spending time checking whether information is current before they can respond or report accurately. Does that assessment sound accurate?"
+    };
+  }
+
   if (!completed.desired_outcome) {
     return {
       stage: "desired_outcome",
       completed,
       canRecommend,
       canCaptureLead,
-      nextQuestion: "Which area should we treat as the first priority?"
+      nextQuestion: "If this process worked exactly the way you'd like it to, what would be different?"
     };
   }
 
@@ -205,6 +195,28 @@ export function evaluateConversationState({
       nextQuestion: existingSystemsKnown
         ? "Are there any security, compliance, timeline, or operational constraints we should consider?"
         : "What systems, platforms, or tools are currently involved in this workflow?"
+    };
+  }
+
+  if (!completed.solution_direction) {
+    return {
+      stage: "solution_direction",
+      completed,
+      canRecommend,
+      canCaptureLead,
+      nextQuestion:
+        "Based on what you've shared, the practical direction is to improve status visibility, reduce manual follow-ups, and make pending work easier to track. Does that direction match what you want to solve?"
+    };
+  }
+
+  if (!completed.recommendation) {
+    return {
+      stage: "recommendation",
+      completed,
+      canRecommend,
+      canCaptureLead,
+      nextQuestion:
+        "The strongest direction appears to be a centralized status visibility workflow that reduces repeated manual follow-ups between teams. Does this recommendation sound aligned with your goal?"
     };
   }
 

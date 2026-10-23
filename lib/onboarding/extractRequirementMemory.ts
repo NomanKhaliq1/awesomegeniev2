@@ -46,7 +46,7 @@ const RequirementMemorySchema = z.object({
   budget_range: z.coerce.string().nullable().optional().describe("The budget range in mind."),
   timeline: z.coerce.string().nullable().optional().describe("The target project delivery timeline."),
   required_features: z.union([z.string(), z.array(z.string())]).nullable().optional().describe("Features or integration capabilities requested."),
-
+  
   // New Discovery fields
   goals: z.union([z.string(), z.array(z.string())]).nullable().optional().describe("The primary business goals or outcomes they want to achieve."),
   pain_points: z.union([z.string(), z.array(z.string())]).nullable().optional().describe("The customer or team pain points and bottlenecks."),
@@ -111,7 +111,7 @@ export async function extractRequirementMemory(
       getPromptTemplate("extract_memory.system"),
       getPromptTemplate("extract_memory.user")
     ]);
-
+    
     const renderedUser = renderTemplate(userTemplate, { message });
 
     const result = await structuredModel.invoke([
@@ -169,11 +169,9 @@ export function extractRequirementMemoryFallback(message: string): RequirementMe
     ...deterministicFields
   };
 
-  const serviceType = hasExplicitServiceSelection(message)
-    ? servicePatterns.find((candidate) =>
-        candidate.patterns.some((pattern) => normalizedMessage.includes(pattern))
-      )?.service
-    : null;
+  const serviceType = servicePatterns.find((candidate) =>
+    candidate.patterns.some((pattern) => normalizedMessage.includes(pattern))
+  )?.service;
 
   if (serviceType) {
     memory.service_type = serviceType;
@@ -305,21 +303,8 @@ function extractDeterministicFields(message: string): RequirementMemory {
     memory.required_features = requiredFeatures;
   }
 
-  if (/\b(mortgage|loan operations?|loan status|borrower|lending)\b/i.test(message)) {
-    memory.industry = "Mortgage lending";
-  }
-
-  const operationalMetrics = extractOperationalMetrics(message);
-  if (operationalMetrics) {
-    memory.conversion_metrics = operationalMetrics;
-  }
-
-  if (hasExplicitServiceSelection(message)) {
-    if (/\b(integration|synchronization|sync)\b/i.test(message)) {
-      memory.service_type = memory.service_type ?? "Systems Integration";
-    } else if (/\b(automation|workflow)\b/i.test(message)) {
-      memory.service_type = memory.service_type ?? "Business Automation";
-    }
+  if (/\b(integration|synchronization|sync|automation|workflow)\b/i.test(message)) {
+    memory.service_type = memory.service_type ?? "Business Automation";
   }
 
   return memory;
@@ -341,10 +326,6 @@ function extractCurrentProcess(message: string) {
 function extractExistingSystems(message: string) {
   const normalized = message.toLowerCase();
   const systems: string[] = [];
-
-  if (/\b(?:remove|exclude|omit|not confirmed|not shared|do not include|don'?t include|do not assume|don'?t assume|keep .* generic)\b/i.test(normalized)) {
-    return null;
-  }
 
   if (/\bloan system\b/i.test(normalized)) systems.push("Loan system");
   if (/\bcrm\b/i.test(normalized)) systems.push("CRM");
@@ -403,31 +384,6 @@ function extractRequiredFeatures(message: string) {
     features.push("Security, access control, audit visibility, and compliance considerations");
   }
   return features.length > 0 ? Array.from(new Set(features)).join("; ") : null;
-}
-
-function extractOperationalMetrics(message: string) {
-  const metrics: string[] = [];
-  if (/\bdelays?|response time|processing time|turnaround time\b/i.test(message)) {
-    metrics.push("Reduce workflow delays");
-  }
-  if (/\bduplicate work|duplicate updates?|repeated data entry|redundant data entry\b/i.test(message)) {
-    metrics.push("Reduce duplicate work");
-  }
-  if (/\bvisibility gaps?|improve visibility|internal visibility\b/i.test(message)) {
-    metrics.push("Improve operational visibility");
-  }
-
-  return metrics.length > 0 ? Array.from(new Set(metrics)).join("; ") : null;
-}
-
-function hasExplicitServiceSelection(message: string) {
-  if (/\b(whether|trying to understand whether|not sure (?:whether|if)|do we need)\b/i.test(message)) {
-    return false;
-  }
-
-  return /\b(?:we|i)\s+(?:need|want|require|selected|chose|have chosen|are looking for)\s+(?:an?\s+|some\s+)?(?:[a-z0-9-]+\s+){0,3}(?:systems?\s+integration|integration|automation|workflow automation|website development|custom software|crm development|reporting|analytics)\b/i.test(
-    message
-  ) || /\bservice type\s+(?:is|:)\s*/i.test(message);
 }
 
 function looksLikeBottleneckAnswer(message: string) {
@@ -572,17 +528,13 @@ function extractCountryLocation(message: string) {
 }
 
 function sanitizeExtractedMemory(message: string, memory: RequirementMemory): RequirementMemory {
-  const groundedMemory = removeUngroundedFields(message, memory);
-
-  if (isContactOnlyMessage(message, groundedMemory) || isContactInfoOnlyMessage(message, groundedMemory)) {
+  if (isContactOnlyMessage(message, memory) || isContactInfoOnlyMessage(message, memory)) {
     return removeNullishValues({
-      latest_project_note: groundedMemory.latest_project_note ?? message,
-      email: groundedMemory.email,
-      phone: groundedMemory.phone,
-      contact_name: groundedMemory.contact_name,
-      contact_role: groundedMemory.contact_role,
-      company_name: groundedMemory.company_name,
-      country_location: groundedMemory.country_location
+      latest_project_note: memory.latest_project_note ?? message,
+      email: memory.email,
+      phone: memory.phone,
+      contact_name: memory.contact_name,
+      country_location: memory.country_location
     });
   }
 
@@ -602,48 +554,19 @@ function sanitizeExtractedMemory(message: string, memory: RequirementMemory): Re
     "budget_range",
     "timeline",
     "required_features"
-  ].some((key) => hasValue(groundedMemory[key]));
+  ].some((key) => hasValue(memory[key]));
 
   if (hasHighValueDetails) {
-    return groundedMemory;
+    return memory;
   }
 
   if (!isInformationOnlyQuestion(message)) {
-    return groundedMemory;
+    return memory;
   }
 
   return {
     latest_project_note: message
   };
-}
-
-function removeUngroundedFields(message: string, memory: RequirementMemory): RequirementMemory {
-  const grounded = { ...memory };
-
-  if (
-    hasValue(grounded.support_workload) &&
-    !/\b(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|several)\s*(?:minutes?|hours?|days?|people|employees?|staff|fte|full[- ]time|part[- ]time)\b|\b(?:full[- ]time|part[- ]time)\b/i.test(message)
-  ) {
-    delete grounded.support_workload;
-  }
-
-  if (hasValue(grounded.inquiry_volume) && !/\b\d+\s*(?:loans?|inquiries?|requests?|transactions?|tickets?)\b/i.test(message)) {
-    delete grounded.inquiry_volume;
-  }
-
-  if (hasValue(grounded.traffic_volume) && !/\b\d+[\d,]*\s*(?:visitors?|visits?|sessions?|users?)\b/i.test(message)) {
-    delete grounded.traffic_volume;
-  }
-
-  if (hasValue(grounded.team_size) && !/\b\d+\s*(?:people|employees?|processors?|agents?|team members?|users?|staff)\b/i.test(message)) {
-    delete grounded.team_size;
-  }
-
-  if (hasValue(grounded.service_type) && !hasExplicitServiceSelection(message)) {
-    delete grounded.service_type;
-  }
-
-  return grounded;
 }
 
 function isContactOnlyMessage(message: string, memory: RequirementMemory) {

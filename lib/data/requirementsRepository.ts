@@ -136,12 +136,7 @@ export async function updateRequirementMemory({
   };
 
   const cleanedMemory: RequirementMemory = {};
-  const fieldsToRemove = new Set<string>();
   for (const [key, value] of Object.entries(memory)) {
-    if (value === null) {
-      fieldsToRemove.add(key);
-      continue;
-    }
     const val = cleanValue(value);
     if (val !== null) {
       cleanedMemory[key] = val;
@@ -160,9 +155,6 @@ export async function updateRequirementMemory({
     ...cleanedExistingMemory,
     ...cleanedMemory
   };
-  for (const key of fieldsToRemove) {
-    delete nextMemory[key];
-  }
 
   const { data, error } = await supabase
     .from("client_requirements")

@@ -722,8 +722,7 @@ const systemSettings = [
       collecting_core: "Exploring needs",
       collecting_service_details: "Collecting service details",
       ready_for_files: "Ready for supporting files",
-      ready_to_complete: "Ready to complete",
-      completed: "Onboarding complete"
+      ready_to_complete: "Ready to complete"
     },
     description: "Customer-facing labels for onboarding state."
   },

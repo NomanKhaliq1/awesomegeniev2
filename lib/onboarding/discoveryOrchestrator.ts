@@ -5,12 +5,6 @@ import { listOnboardingFields } from "@/lib/data/configRepository";
 import { serviceNameToSlug } from "@/lib/onboarding/serviceSlug";
 import { calculateConfidenceScore, getConfidenceLevel } from "@/lib/onboarding/discovery";
 import { evaluateConversationState } from "@/lib/onboarding/conversationStateManager";
-import {
-  advanceConversationStage,
-  collectAskedQuestions,
-  mapDiscoveryStage,
-  mergeConversationMemory
-} from "@/lib/onboarding/conversationControl";
 
 export type DiscoveryOrchestratorResult = {
   extractedMemory: RequirementMemory;
@@ -39,12 +33,11 @@ export async function runDiscoveryOrchestrator(
   // Run Enterprise sanitization & validation
   const { sanitized, alerts } = validateRequirementMemory(rawExtracted);
 
-  const { nextMemory, persistencePatch } = mergeConversationMemory(
-    currentMemory,
-    sanitized,
-    message
-  );
-  const extractedMemory = persistencePatch;
+  const extractedMemory = sanitized;
+  const nextMemory = {
+    ...currentMemory,
+    ...extractedMemory
+  };
   const coreMissingFields = await getMissingRequiredFields(nextMemory);
   const serviceSlug = serviceNameToSlug(
     typeof nextMemory.service_type === "string" ? nextMemory.service_type : null
@@ -89,31 +82,6 @@ export async function runDiscoveryOrchestrator(
     recentConversation,
     lastUserMessage: message
   });
-  const currentStage = advanceConversationStage(
-    nextMemory.current_stage,
-    mapDiscoveryStage(conversationState.stage)
-  );
-  const confirmedFacts = Object.keys(nextMemory)
-    .filter((key) => !["confirmed_facts", "open_items", "asked_questions", "rejected_facts", "current_stage", "brief_status", "latest_project_note"].includes(key))
-    .filter((key) => nextMemory[key] !== null && nextMemory[key] !== undefined && String(nextMemory[key]).trim().length > 0)
-    .sort()
-    .join("|");
-  const askedQuestions = collectAskedQuestions(recentConversation);
-
-  Object.assign(nextMemory, {
-    current_stage: currentStage,
-    confirmed_facts: confirmedFacts,
-    open_items: missingFields.length ? missingFields.join("|") : null
-  });
-  Object.assign(extractedMemory, {
-    current_stage: currentStage,
-    confirmed_facts: confirmedFacts,
-    open_items: missingFields.length ? missingFields.join("|") : null
-  });
-  if (askedQuestions) {
-    nextMemory.asked_questions = askedQuestions;
-    extractedMemory.asked_questions = askedQuestions;
-  }
   
   const nextQuestion = conversationState.nextQuestion ?? missingServiceFields[0]?.question ?? null;
 
